@@ -38,15 +38,10 @@ class OrderBook:
         self.asks = {}
         self.order_id_map = {}
 
-    def add(self):
-        print("addorder")
-    def delete(self, type):
-        print("deleteorder")
-        """
-        return multi order
-        """
-        return message
 
+    """
+    this part can rewrite in cython for further performance improment ?
+    """
 class MatchingEngine:
     def __init__(self):
         self.order_books = {}

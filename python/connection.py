@@ -2,18 +2,16 @@ class ServerTCP:
     def __init__(self):
         self.binding_ports = [100, 101, 102]
         
-    def ServerConnection(order):
+    def server_connection(self):
         "receive order from client , send result to two client"
-        print("server tcp")
-        return status
+        pass
 
 class ClientTCP:
     def __init__(self):
-        
+        self.ip_address = ["",""]
         self.binding_ports = [100, 101, 102]
         "0 is normal, differnet number corresponding different stastus"
         self.ports_status = [0, 0, 0]
-    def ClientConnection(order):
+    def client_connection(self):
         "send order to two exchanger? "
-        print("send reliable oder")
-        return status
+        pass

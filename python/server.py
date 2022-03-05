@@ -8,6 +8,13 @@ class BuySide(enum.Enum):
     BUY = 1
     SELL = -1
 
+class OrderType(enum.Enum):
+    LIMIT_ORDER = 0 #限价申报
+    COUNTER_PARTY_BEST_PRICE_DECLARATION = 1#对手方最优价格申报
+    OUR_BEST_PRICE_DECLARATION = 2#本方最优价格申报
+    TOP_FIVE_INS_TRANS_REMAIN_CANCEL_DECLAR = 3#最优五档即时成交剩余撤销申报
+    IMMEDIATE_TRANS_REMAIN_CANCEL_DECALR = 4#即时成交剩余撤销申报
+    FULL_DEAL_OR_CANCEL_ORDER = 5#全额成交或撤销申报
 
 class Order:
     def __init__(self, stk_code, order_id, direction, price, volume, type):
@@ -50,11 +57,11 @@ class MatchingEngine:
         print("test")
 
     "fun parameter is not determined, just for temporary"
-    def add_order(self, order):
+    def add_order(self, str_code, price, volume, side):
         pass
-    def cancel_order(self, order):
+    def cancel_order(self, order_id, strcode):
         pass
-    def amend_order(self, order):
+    def amend_order(self, order_id, strcode, amended_price, amended_prices):
         pass
 
 

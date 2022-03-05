@@ -10,12 +10,28 @@ class client:
     read order from file, send order to exchange, (receive result from  exchanger? is it essential?)
     """
     def __init__(self):
-        pass
+        self.trade_list = []
     def result_generate(self, data_file_path, res_file_path):
+        """
+        发送order, 生成结果
+        :param data_file_path    数据存放文件夹
+        :param res_file_path     结果存放位置      
+        :return status, 存结果
+        """
         pass
 
 
     def read_order_from_file(self, order_id_path, direction_path, price_path, volume_path, type_path):
+        """
+        发送order, 生成结果
+        :param order_id_path 
+        :param direction_path     
+        :param price_path     
+        :param volume_path     
+        :param type_path
+
+        :return a Order class
+        """
         order_id_mtx = h5py.File(order_id_path, 'r')['order_id']
         direction_mtx = h5py.File(direction_path, 'r')['direction']
         price_mtx = h5py.File(price_path, 'r')['price']
@@ -32,5 +48,10 @@ class client:
                     OrderType(type_mtx[x,y,z]))
 
     def dump_trade(trade_list):
+        """
+        生成结果
+        :param trade_list 结果         
+        :return none
+        """
         with open("Ans", 'wb') as f:
             f.write(b''.join(map(lambda x: x.to_bytes(), trade_list)))

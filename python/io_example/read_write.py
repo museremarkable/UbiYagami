@@ -20,7 +20,7 @@ class Trade:
 
     def to_bytes(self):
         return struct.pack("=iiidi", self.stk_code, self.bid_id, self.ask_id, self.price, self.volume)
-
+'''
 def read_order_from_file(self, order_id_path, direction_path, price_path, volume_path, type_path):
     order_id_mtx = h5py.File(order_id_path, 'r')['order_id']
     direction_mtx = h5py.File(direction_path, 'r')['direction']
@@ -36,7 +36,7 @@ def read_order_from_file(self, order_id_path, direction_path, price_path, volume
                 price_mtx[x,y,z],
                 volume_mtx[x,y,z],
                 OrderType(type_mtx[x,y,z]))
-
+'''
 def dump_trade(trade_list):
     with open("Ans", 'wb') as f:
         f.write(b''.join(map(lambda x: x.to_bytes(), trade_list)))

@@ -1,6 +1,7 @@
 import imp
-from connection import ReliableTCP
+from connection import ClientTCP
 import h5py
+from python.server import BuySide, OrderType
 from server import Order
 
 
@@ -10,24 +11,26 @@ class client:
     """
     def __init__(self):
         pass
+    def result_generate(self, data_file_path, res_file_path):
+        pass
 
 
-def read_order_from_file(self, order_id_path, direction_path, price_path, volume_path, type_path):
-    order_id_mtx = h5py.File(order_id_path, 'r')['order_id']
-    direction_mtx = h5py.File(direction_path, 'r')['direction']
-    price_mtx = h5py.File(price_path, 'r')['price']
-    volume_mtx = h5py.File(volume_path, 'r')['volume']
-    type_mtx = h5py.File(type_path, 'r')['type']
-    x = 10
-    y = 100
-    z = 77
-    return Order(x%10 + 1,
-                order_id_mtx[x,y,z],
-                DirectionType(direction_mtx[x,y,z]),
-                price_mtx[x,y,z],
-                volume_mtx[x,y,z],
-                OrderType(type_mtx[x,y,z]))
+    def read_order_from_file(self, order_id_path, direction_path, price_path, volume_path, type_path):
+        order_id_mtx = h5py.File(order_id_path, 'r')['order_id']
+        direction_mtx = h5py.File(direction_path, 'r')['direction']
+        price_mtx = h5py.File(price_path, 'r')['price']
+        volume_mtx = h5py.File(volume_path, 'r')['volume']
+        type_mtx = h5py.File(type_path, 'r')['type']
+        x = 10
+        y = 100
+        z = 77
+        return Order(x%10 + 1,
+                    order_id_mtx[x,y,z],
+                    BuySide(direction_mtx[x,y,z]),
+                    price_mtx[x,y,z],
+                    volume_mtx[x,y,z],
+                    OrderType(type_mtx[x,y,z]))
 
-def dump_trade(trade_list):
-    with open("Ans", 'wb') as f:
-        f.write(b''.join(map(lambda x: x.to_bytes(), trade_list)))
+    def dump_trade(trade_list):
+        with open("Ans", 'wb') as f:
+            f.write(b''.join(map(lambda x: x.to_bytes(), trade_list)))

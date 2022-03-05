@@ -1,5 +1,5 @@
 from sqlalchemy import func
-from connection import ServerTCP
+from connection.connection import ServerTCP
 import enum
 import h5py
 import struct

@@ -1,8 +1,8 @@
 import imp
 from connection import ClientTCP
 import h5py
-from python.server import BuySide, OrderType
-from server import Order
+from python.server.server import BuySide, OrderType
+from server.server import Order
 
 
 class client:

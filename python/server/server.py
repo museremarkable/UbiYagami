@@ -3,38 +3,50 @@ from connection.connection import ServerTCP
 import enum
 import h5py
 import struct
+from data_type import Order, MinOrder, Trade, OrderType, DirectionType
 
-class BuySide(enum.Enum):
-    BUY = 1
-    SELL = -1
+class BookBase:
+    def __init__(self):
+        pass
 
-class OrderType(enum.Enum):
-    LIMIT_ORDER = 0 #限价申报
-    COUNTER_PARTY_BEST_PRICE_ORDER = 1#对手方最优价格申报
-    OUR_BEST_PRICE_ORDER = 2#本方最优价格申报
-    TOP_FIVE_INS_TRANS_REMAIN_CANCEL_ORDER = 3#最优五档即时成交剩余撤销申报
-    IMMEDIATE_TRANS_REMAIN_CANCEL_ORDER = 4#即时成交剩余撤销申报
-    FULL_DEAL_OR_CANCEL_ORDER = 5#全额成交或撤销申报
+    def push_back():
+        pass
 
-class Order:
-    def __init__(self, stk_code, order_id, direction, price, volume, type):
-        self.stk_code = stk_code
-        self.order_id = order_id
-        self.direction = direction
-        self.price = price
-        self.volume = volume
-        self.type = type
+    def pull_in():
+        pass
 
-class Trade:
-    def __init__(self, stk_code, bid_id, ask_id, price, volume):
-        self.stk_code = stk_code
-        self.bid_id = bid_id
-        self.ask_id = ask_id
-        self.price = price
-        self.volume = volume
+class OrderLink:
+    """
+    The link list of orders under each price level
+    """
+    def __init__(self):
+        pass
+    def insert_order(self, minorder: MinOrder):
+        """
+        for order type 
+        LIMIT_ORDER, 
+        OUR_BEST_PRICE_ORDER
+        """
+        pass
 
-    def to_bytes(self):
-        return struct.pack("=iiidi", self.stk_code, self.bid_id, self.ask_id, self.price, self.volume)
+    def match_order(self, size):
+        """
+        Match order from lower order_id to higher until the size is all filled. 
+        Otherwise, return the size remain to fill after consuming all the available orders on the link
+        : size      the size of to fill
+        : return1    number of volume remained to fill for this coming order
+        : return2   list of transaction detail in Trade type
+        """
+        pass
+        remain = 0
+        ls_trade = []
+        return remain, ls_trade
+
+    def amend_order(self, order_id, diff):
+        pass
+
+    def cancel_order(self, order_id):
+        pass
 
 class OrderBook:
     """
@@ -45,6 +57,28 @@ class OrderBook:
         self.bids = {}
         self.asks = {}
         self.order_id_map = {}
+    
+    def _get_price_level(self, price):
+        pass
+
+    def handle_order_limit(self, order: Order):
+        pass
+
+    def handle_order_counter_side_optimal(self, ):
+        pass
+
+    def handle_order_own_side_optimal(self, ):
+        pass
+
+    def handle_order_best_five(self, ):
+        pass
+
+    def handle_order_immediate_transact(self, ):
+        pass
+
+    def handle_order_full_deal(self, ):
+        pass
+
 
 
     """

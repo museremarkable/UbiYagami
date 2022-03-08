@@ -3,6 +3,7 @@ from connection.connection import ClientTCP
 import h5py
 import struct
 import time
+from argparse import ArgumentParser
 import numpy as np
 from data_type import OrderType, DirectionType, OperationType, Order, Quote, Trade
 #from python.server.server import BuySide, OrderType
@@ -17,6 +18,7 @@ class Client:
         self.trade_list = []
         # client_id used to identify different client server
         self.client_id = client_id
+        self.curr_order_page = np.array
 
     def data_read(self, data_file_path, res_file_path):
         """
@@ -78,21 +80,34 @@ class Client:
             print(curr_order_id_page.shape)
             print(curr_order_page.shape)
 
-    def communicate_with_server(self, curr_order_page,hook, stock_id, save_path) -> list:
+            # here need to use a observe design pattern, when one loop ends send the currorder to function communicate_with_server
+
+    def communicate_with_server(self, curr_order_page, hook , stock_id, save_path) -> list:
         """
         input is one stock data and stock id, communicate with two server , get the trade and then write it into corresponding trade file
         """
         self.trade_list = ClientTCP(curr_order_page, stock_id, hook)
-        self.dump_trade(trade_list=self.trade_list, save_path=save_path)
+        self.dump_trade(self.trade_list, save_path, stock_id)
 
 
-    def dump_trade(self, trade_list, save_path):
+    def dump_trade(self, trade_list, save_path, stock_id):
         """
         read trade_list, tans every trade into a 12 byte 
         :param trade_list       结果        
         :param save_path        the folder path where res save
         :return none
         """
-
-        with open("Ans", 'wb') as f:
+        res_file_path = save_path + '/' + str(stock_id)
+        with open(res_file_path, 'wb') as f:
             f.write(b''.join(map(lambda x: x.to_bytes(), trade_list)))
+
+
+parser = ArgumentParser()
+parser.add_argument("-f", "--file",  help="data file folder path")
+parser.add_argument("-r", "--res",  help="result folder path")
+parser.add_argument("-c", "--client_id",  help="client_id, which is 1 or 2")
+args = parser.parse_args()
+
+Trader_Server = Client(args[2])
+Trader_Server.data_read(args[0], args[1])
+

@@ -23,9 +23,12 @@ class OrderLink:
         self.stock = stock
         self.price = price  # price level this link is at
         self.side = side    # int, 0: ask, 1: bid
+        self.op_new = OperationType.NEW_BID if self.side else OperationType.NEW_ASK
+        self.op_amend = OperationType.AMEND_BID if self.side else OperationType.AMEND_ASK
+        self.op_remove = OperationType.REMOVE_BID if self.side else OperationType.REMOVE_ASK
 
         self.link = orders  # orders are stored here
-        self.cum = 0        # cumulated volume
+        self.cum = sum([x.volume for x in orders])        # cumulated volume
 
 
     def _search_order_loc(self, order_id: int) -> int:
@@ -42,32 +45,59 @@ class OrderLink:
                 return length-i
 
 
-
     def match_order(self, miniorder: MinOrder) -> Tuple[MinOrder, Trade, Quote, List[Order]]:
         """
         Match order from lower order_id to higher until the size is all filled. 
         Otherwise, return the size remains to fill after consuming all the available orders on the link
+        Only when there are remaining orders after matching, will the link be updated,
+        Orderwise, nothing will be changed in the link
+        This enable the full deal order type, the order book can decide whether to remove the price level according to the final result;
+        Worth notice that when there are remaining orders after matching, it means the full deal should be deal, so update the link inside will do no harms. 
         : param         miniorder       the mini order to fill in this orderlink
-        : return1                       the remained miniorder after matching in this order link
-        : return2                       list of transaction detail in Trade type
-        : return3
-        : return        ls_order        list of Order, rest orders after matching
+        : return        volume_remain   the remained miniorder after deduced volume from the matching in this order link
+        : return        trades          list of transaction detail in Trade type
+        : return        quotes          list of book update details in Quote type
         """
-        pass
-        remain = 0
-        ls_trade = []
-        ls_quote = []
-        return remain, ls_trade, ls_quote, ls_order
-        
+        link = self.link
+        cum = self.cum
+        trades = []
+        quotes = []
 
-    def pre_match_order(self, miniorder: MinOrder) -> Tuple[MinOrder, Trade, Quote, List[Order]]:
-        """
-        Used for full deal, it doesn't create its link but create a list of order after matching, 
-        If all deal, this orderlink would be replaced outside with the one initiated by the list of orders created from here 
-        : param         miniorder       the mini order to fill in this orderlink
-        : return                        a list of orders used to initiate a new orderlink
-        """
-        pass
+        volume_remain = miniorder.volume
+        for i, link_order in enumerate(link):
+            volume_remain -= link_order.volume
+            if volume_remain < 0:
+                # Only when the link has rest orders, will it be update; 
+                # Otherwise, nothing will change, it will be remove from the orderbook from outside
+                volume_diff = link_order.volume+volume_remain
+                link[i].volume = -volume_remain
+                self.link = link[i:]        
+                volume_remain = 0
+
+                cum -= volume_diff
+                self.cum = cum
+                quote = Quote(self.stock, link_order.order_id, self.price, volume_diff, self.op_amend)
+                if self.side: # is bid side
+                    trade = Trade(self.stock, link_order.order_id, miniorder.order_id, self.price, volume_diff)
+                else:
+                    trade = Trade(self.stock, miniorder.order_id, link_order.order_id, self.price, volume_diff)
+                quotes.append(quote)
+                trades.append(trade)
+            
+            cum -= link_order.volume
+            # TODO can cancel this branch for better performance?
+            quote = Quote(self.stock, link_order.order_id, self.price, link_order.volume, self.op_remove)
+            if self.side: # is bid side
+                trade = Trade(self.stock, link_order.order_id, miniorder.order_id, self.price, link_order.volume)
+            else:
+                trade = Trade(self.stock, miniorder.order_id, link_order.order_id, self.price, link_order.volume)
+            quotes.append(quote)
+            trades.append(trade)
+
+            if volume_remain == 0:
+                break
+
+        return volume_remain, trades, quotes
 
 
     def insert_order(self, miniorder: MinOrder) -> List[Quote]:
@@ -78,28 +108,27 @@ class OrderLink:
         loc = self._search_order_loc(miniorder.order_id)
         self.link.insert(loc, miniorder)
 
-        operation = OperationType.NEW_BID if self.side else OperationType.NEW_ASK
-        quotes = Quote(self.stock, miniorder.order_id, self.price, miniorder.volume, operation)
+        quotes = Quote(self.stock, miniorder.order_id, self.price, miniorder.volume, self.op_new)
         return [quotes]
 
 
-    def amend_order(self, miniorder: MinOrder, order_id, diff) -> List[Quote]:
+    def amend_order(self, miniorder: MinOrder) -> List[Quote]:
         self.cum += miniorder.volume
         loc = self._search_order_loc(miniorder.order_id)
+        assert self.link[loc].order_id == miniorder.order_id, f"order id {miniorder.order_id} not found"
         self.link[loc].volume += miniorder.volume
 
-        operation = OperationType.AMEND_BID if self.side else OperationType.AMEND_ASK
-        quotes = Quote(self.stock, miniorder.order_id, self.price, miniorder.volume, operation)
+        quotes = Quote(self.stock, miniorder.order_id, self.price, miniorder.volume, self.op_amend)
         return [quotes]
 
 
-    def cancel_order(self, miniorder: MinOrder, order_id) -> List[Quote]:
-        self.cum += miniorder.volume
+    def cancel_order(self, miniorder: MinOrder) -> List[Quote]:
         loc = self._search_order_loc(miniorder.order_id)
+        assert self.link[loc].order_id == miniorder.order_id, f"order id {miniorder.order_id} not found"
         order_removed = self.link.pop(loc)
-        
-        operation = OperationType.REMOVE_BID if self.side else OperationType.REMOVE_ASK
-        quotes = Quote(self.stock, order_removed.order_id, self.price, -order_removed.volume, operation)
+        self.cum -= order_removed.volume
+
+        quotes = Quote(self.stock, order_removed.order_id, self.price, -order_removed.volume, self.op_remove)
         return [quotes]
 
 
@@ -185,11 +214,11 @@ class OrderBook:
                 self.best_prices[bid_ask] = self.sorted_prices[bid_ask][0]
 
 
-    def _change_price_level(self, price, order_list, bid_ask):
-        """
-        Replace the level with a new one, given a sorted list of orders 
-        """
-        self.levels[bid_ask][price] = OrderLink(order_list, price, bid_ask, self.stock)
+    # def _change_price_level(self, price, order_list, bid_ask):
+    #     """
+    #     Replace the level with a new one, given a sorted list of orders 
+    #     """
+    #     self.levels[bid_ask][price] = OrderLink(order_list, price, bid_ask, self.stock)
 
 
     def _get_price_level(self, price, bid_ask) -> OrderLink:
@@ -387,15 +416,15 @@ class OrderBook:
         
         order_remain = order.to_minorder()
         prices = self._get_sorted_prices(oppo_side) 
-        changed_levels = {}
+        levels_to_remove = []
 
         # matching stage 
         for price in prices:     # match in top 5 prices in the opposite book
             orderlink = self._get_price_level(price, oppo_side)
-            order_remain, this_trades, this_quotes, link_remain = orderlink.pre_match_order(order_remain)
+            order_remain, this_trades, this_quotes = orderlink.match_order(order_remain)
             trades += this_trades
             quotes += this_quotes
-            changed_levels[price] = link_remain
+            levels_to_remove.append(price)
             if order_remain.volume == 0:  
                 # the order is all filled
                 is_remained = False
@@ -407,11 +436,8 @@ class OrderBook:
             quotes = []
             pass # TODO can do remaining order cancel feedback?
         else:
-            for p, l in changed_levels:         # update levels
-                if len(l) == 0:
-                    self._remove_price_level(p, oppo_side)
-                else: 
-                    self._change_price_level(p, l, oppo_side)
+            for p in levels_to_remove:         # update levels
+                self._remove_price_level(p, oppo_side)
 
         return trades, quotes
 

@@ -6,6 +6,7 @@ class ServerTCP:
         "receive order from client , send result to two client"
         pass
 
+
 class ClientTCP:
     def __init__(self):
         self.ip_address = ["",""]

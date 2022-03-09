@@ -3,6 +3,7 @@ from connection.connection import ClientTCP
 import h5py
 import struct
 import time
+import asyncio
 from argparse import ArgumentParser
 import numpy as np
 from data_type import OrderType, DirectionType, OperationType, Order, Quote, Trade
@@ -19,8 +20,10 @@ class Client:
         # client_id used to identify different client server
         self.client_id = client_id
         self.curr_order_page = np.array
-
-    def data_read(self, data_file_path, res_file_path):
+    
+    
+    # asynchronous process data, 10 stock, when have already read one stock then send this stock to server, on the same time process next stock data
+    async def data_read(self, data_file_path, res_file_path):
         """
         发送order, 生成结果
         :param data_file_path    数据存放文件夹
@@ -79,10 +82,11 @@ class Client:
             curr_order_page = curr_order_page[curr_order_page[:, 0].argsort()] 
             print(curr_order_id_page.shape)
             print(curr_order_page.shape)
+            
+            # asynchronous send data
+            await self.communicate_with_server(curr_order_page, hook_mtx, curr_stock_id, res_file_path)
 
-            # here need to use a observe design pattern, when one loop ends send the currorder to function communicate_with_server
-
-    def communicate_with_server(self, curr_order_page, hook , stock_id, save_path) -> list:
+    async def communicate_with_server(self, curr_order_page, hook , stock_id, save_path) -> list:
         """
         input is one stock data and stock id, communicate with two server , get the trade and then write it into corresponding trade file
         """

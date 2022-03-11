@@ -1,4 +1,4 @@
-from data_type import Order, MinOrder, Trade, OrderType, DirectionType, Quote
+from python.server.data_type import Order, MinOrder, Trade, OrderType, DirectionType, Quote
 from python.server.data_type import OperationType, SubOrder
 from typing import List, Dict, Tuple, Sequence
 
@@ -19,7 +19,7 @@ class OrderLink:
     """
     A list of orders under each price level
     """
-    def __init__(self, orders: List[MinOrder], price, side, stock):
+    def __init__(self, price, side, stock):
         self.stock = stock
         self.price = price  # price level this link is at
         self.side = side    # int, 0: ask, 1: bid
@@ -27,8 +27,8 @@ class OrderLink:
         self.op_amend = OperationType.AMEND_BID if self.side else OperationType.AMEND_ASK
         self.op_remove = OperationType.REMOVE_BID if self.side else OperationType.REMOVE_ASK
 
-        self.link = orders  # orders are stored here
-        self.cum = sum([x.volume for x in orders])        # cumulated volume
+        self.link = []  # orders are stored here
+        self.cum = 0        # cumulated volume
 
 
     def _search_order_loc(self, order_id: int) -> int:
@@ -43,6 +43,7 @@ class OrderLink:
                 return length-1-i
             elif the_miniorder.order_id < order_id:
                 return length-i
+        return 0
 
 
     def match_order(self, miniorder: MinOrder) -> Tuple[MinOrder, Trade, Quote, List[Order]]:
@@ -97,7 +98,8 @@ class OrderLink:
             if volume_remain == 0:
                 break
 
-        return volume_remain, trades, quotes
+        order_remain = MinOrder(miniorder.order_id, volume_remain)
+        return order_remain, trades, quotes
 
 
     def insert_order(self, miniorder: MinOrder) -> List[Quote]:
@@ -105,8 +107,11 @@ class OrderLink:
         insert an order to the link at the right place in order_id ascending order
         """
         self.cum += miniorder.volume
-        loc = self._search_order_loc(miniorder.order_id)
-        self.link.insert(loc, miniorder)
+        if len(self.link) == 0:
+            self.link.append(miniorder)
+        else:
+            loc = self._search_order_loc(miniorder.order_id)
+            self.link.insert(loc, miniorder)
 
         quotes = Quote(self.stock, miniorder.order_id, self.price, miniorder.volume, self.op_new)
         return [quotes]
@@ -128,7 +133,7 @@ class OrderLink:
         order_removed = self.link.pop(loc)
         self.cum -= order_removed.volume
 
-        quotes = Quote(self.stock, order_removed.order_id, self.price, -order_removed.volume, self.op_remove)
+        quotes = Quote(self.stock, order_removed.order_id, self.price, order_removed.volume, self.op_remove)
         return [quotes]
 
 
@@ -182,19 +187,24 @@ class OrderBook:
         : param     bid_ask     int, 0: ask, 1: bid
         : return                list of quote of ADD order
         """
-        self.levels[order.price] = OrderLink([order.to_minorder()], order.price, bid_ask, self.stock)
-        is_new_best = self._is_after(self._get_best_price(), order.price, bid_ask)
+        self.levels[bid_ask][order.price] = OrderLink(order.price, bid_ask, self.stock)
+        quotes = self.levels[bid_ask][order.price].insert_order(order.to_minorder())
+        is_new_best = self._is_after(self._get_best_price(bid_ask), order.price, bid_ask)
         if is_new_best:
             self.best_prices[bid_ask] = order.price
 
         if len(self.sorted_prices[bid_ask]) == 0:
             self.sorted_prices[bid_ask].append(order.price)
         else:
+            IS_ASSIGNED = False
             for i, p in enumerate(self.sorted_prices[bid_ask]):
                 if self._is_after(p, order.price, bid_ask):
+                    self.sorted_prices[bid_ask].insert(i, order.price)
+                    IS_ASSIGNED = True
                     break
-            self.sorted_prices[bid_ask].insert(i, order.price)
-
+            if not IS_ASSIGNED:
+                self.sorted_prices[bid_ask].append(order.price)
+        return quotes
 
     def _remove_price_level(self, price, bid_ask):
         """
@@ -228,7 +238,7 @@ class OrderBook:
         : param     bid_ask     int, 0: ask, 1: bid
         : return                OrderLink
         """
-        return self.levels[bid_ask][price]
+        return self.levels[bid_ask].get(price)
         
     
     def _get_sorted_prices(self, bid_ask ) -> list:
@@ -256,6 +266,22 @@ class OrderBook:
         """
         return self.best_prices[bid_ask]
 
+    def get_price_depth(self):
+        price_depth = {'bid':{}, 'ask':{}}
+        
+        book_side = self.levels[0]
+        print_book = {}
+        for pr, ol in book_side.items():
+            print_book[pr] = ol.cum
+        price_depth['ask'] = print_book
+        
+        book_side = self.levels[1]
+        print_book = {}
+        for pr, ol in book_side.items():
+            print_book[pr] = ol.cum
+        price_depth['bid'] = print_book
+
+        return price_depth
 
     '''
     Handle passive order below (with price), has trade part and book adding part
@@ -265,15 +291,18 @@ class OrderBook:
         side = self._to_bid_ask_book(order.direction)
         oppo_side = self._opposite_side(order.direction)
         oppo_best_price = self._get_best_price(oppo_side)
-        sorted_prices = self._get_sorted_prices(oppo_side)
+        sorted_prices = list(self._get_sorted_prices(oppo_side))
         is_remained = True    
         order_remain = order.to_minorder()
         trades = []
         quotes = []
 
-        if self._is_after(order.price, oppo_best_price, oppo_side):
+        if not self._is_after(oppo_best_price, order.price, oppo_side):
             # price in opposite side, can match first, then store the remainder if any 
             for book_price in sorted_prices:     # match in available prices in the opposite book
+                if self._is_after(book_price, order.price, oppo_side):   
+                    # the order is filled till taking worse price
+                    break
                 orderlink = self._get_price_level(book_price, oppo_side)
                 order_remain, this_trades, this_quotes = orderlink.match_order(order_remain)
                 trades += this_trades
@@ -282,16 +311,16 @@ class OrderBook:
                     # the order is all filled
                     is_remained = False
                     break
+                else:
+                    self._remove_price_level(book_price, oppo_side)
 
-                if self._is_after(book_price, order.price, side):   
-                    # the order is filled till taking worse price
-                    break
 
             if is_remained:     
                 # if still volume remained after matching, create level at this side at the order price
                 order.volume = order_remain.volume
-                self._remove_price_level(order.price, oppo_side)
-                self._create_price_level(order, side)
+                # self._remove_price_level(order.price, oppo_side)
+                this_quotes = self._create_price_level(order, side)
+                quotes += this_quotes
 
         else:
             # if price in the order side
@@ -300,8 +329,8 @@ class OrderBook:
             if orderlink is None:
                 this_quotes = self._create_price_level(order, side)
             else:
-                this_quotes = orderlink.add_order(order.to_minorder())
-                quotes += this_quotes
+                this_quotes = orderlink.insert_order(order.to_minorder())
+            quotes += this_quotes
         
         return trades, quotes
 
@@ -355,7 +384,7 @@ class OrderBook:
         is_remained = True    
         
         order_remain = order.to_minorder()
-        prices = self._get_top5_prices(oppo_side)
+        prices = list(self._get_top5_prices(oppo_side))
 
         # matching stage 
         for book_price in prices:     # match in top 5 prices in the opposite book
@@ -385,7 +414,7 @@ class OrderBook:
         is_remained = True    
         
         order_remain = order.to_minorder()
-        prices = self._get_sorted_prices(oppo_side)
+        prices = list(self._get_sorted_prices(oppo_side))
 
         # matching stage 
         for book_price in prices:     # match in top 5 prices in the opposite book
@@ -415,7 +444,7 @@ class OrderBook:
         is_remained = True    
         
         order_remain = order.to_minorder()
-        prices = self._get_sorted_prices(oppo_side) 
+        prices = list(self._get_sorted_prices(oppo_side))
         levels_to_remove = []
 
         # matching stage 
@@ -424,11 +453,11 @@ class OrderBook:
             order_remain, this_trades, this_quotes = orderlink.match_order(order_remain)
             trades += this_trades
             quotes += this_quotes
-            levels_to_remove.append(price)
             if order_remain.volume == 0:  
                 # the order is all filled
                 is_remained = False
                 break
+            levels_to_remove.append(price)
 
         if is_remained:     
             # if still volume remained after matching

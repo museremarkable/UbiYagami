@@ -122,14 +122,6 @@ class OrderStreamClient:
         return struct.pack('!ii', 1, operation) + json.dumps(body).encode() + b'\r\n'
 
 
-class Stock_Data:
-    """
-    store one stock all data
-    """
-    def __init__(self, client_id) -> None:
-        self.client_id = client_id
-        self.curr_order_page = np.array
-    def data_read(self, data_file_path)
 
 
 class Client:
@@ -236,6 +228,9 @@ class Client:
     async def communicate_single_stock_with_server(self, stock_id) -> list:
         """
         input is one stock data and stock id, communicate with two server , get the trade and then write it into corresponding trade file
+        """
+        """
+        读入
         """
         data_length = self.all_page[stock_id].shape[0]
         

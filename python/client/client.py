@@ -140,7 +140,7 @@ class Client:
         self.hook_mtx = h5py.File(data_file_path + '/' + "hook.h5", 'r')['hook']
 
     
-    # asynchronous process data, 10 stock, when have already read one stock then send this stock to server, on the same time process next stock data
+    # process all data, alter that then trans these data
     def data_read(self):
         """
         read all data from file
@@ -230,7 +230,12 @@ class Client:
         input is one stock data and stock id, communicate with two server , get the trade and then write it into corresponding trade file
         """
         """
-        读入
+        每次传输一个order class的数据
+        首先根据stock_id读入对应的股票数据， 然后按order_id顺序进行传输。 
+        传输时，首先在hook矩阵中判断是否需要传输，
+        不需要：除stock_id和order_id外其它参数全部置0
+        需要：json文件格式传输
+
         """
         data_length = self.all_page[stock_id].shape[0]
         

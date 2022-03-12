@@ -1,6 +1,18 @@
 from python.server.data_type import Order, MinOrder, Trade, OrderType, DirectionType, Quote
 from python.server.data_type import OperationType, SubOrder
 from typing import List, Dict, Tuple, Sequence
+from multiprocessing import Queue, Process
+import logging
+from time import sleep
+
+
+logging.basicConfig(level=logging.DEBUG #设置日志输出格式
+                    ,filename="exchange_runtime.log" #log日志输出的文件位置和文件名
+                    ,filemode="w" #文件的写入格式，w为重新写入文件，默认是追加
+                    ,format="%(asctime)s - %(name)s - %(levelname)-9s - %(filename)-8s : %(lineno)s line - %(message)s" #日志输出的格式
+                    # -8表示占位符，让输出左对齐，输出长度都为8位
+                    ,datefmt="%Y-%m-%d %H:%M:%S" #时间输出的格式
+                    )
 
 class BookBase:
     """
@@ -12,7 +24,10 @@ class BookBase:
     def push_back():
         pass
 
-    def pull_in():
+    def pop_in():
+        pass
+
+    def storage_match():
         pass
 
 class OrderLink:
@@ -249,6 +264,7 @@ class OrderBook:
         """
         return self.sorted_prices[bid_ask]
 
+
     def _get_top5_prices(self, bid_ask) -> list:
         """
         Get sorted top 5 optimal prices from self.bid_ask_sort_price
@@ -478,33 +494,97 @@ class MatchingEngine:
     """
     all matching operation is accomplished in this class
     multiplex by stock code in this level 
+    * order id sorting
+    * order checking (out of price range limit, volume>0, price>0, id>0)
     """
     def __init__(self):
         self.order_books = {}       # order book of different stocks
-        self.curr_order_id = 0
-        self.curr_trade_id = 0
-        print("test")
+        self.next_order_id = {}
+        self.book_read_queue = Queue()
+        self.order_cache = {}   # list of dicts
 
-    "fun parameter is not determined, just for temporary"
-    def handle_order(self, str_code, order_id, price, volume, direction):
+        self.connect = None     # TODO TBA
+
+    def _recv_order(self) -> Order:
+        pass
+
+    def _send_feed(self, trades: List[Trade], quotes: List[Quote]):
+        pass
+    
+    def _check_order(self, order: Order):
+        pass
+        if order.order_id < 0: logging.error(f"Order ID: {order.order_id} < 0")
+        if order.volume < 0: logging.error(f"Order ID: {order.order_id} - volume {order.volume} < 0")  # volume == 0 for void order indicating that the hook is not triggered
+        if order.price <= 0: logging.error(f"Order ID: {order.order_id} - price {order.price} <= 0")
+        if order.type > 5: logging.error(f"Order ID: {order.order_id} - invalid order type {order.type}")
+
+    def _new_stock_symbol(self, stock):
+        self.order_books[stock] = OrderBook(stock)
+        self.next_order_id[stock] = 1
+        self.order_cache[stock] = {}        # price -> Order
+
+    def _put_queue_valid_order(self, stock, order: Order):
+        self.next_order_id[stock] += 1
+        if order.volume != 0:               # if not empty hook
+            self.book_read_queue.put(order)
+    
+    def _get_queue_valid_order(self):
+        return self.book_read_queue.get(block=True)
+
+    def update_order_queue_thread(self, order: Order):
         """
-        Add an order
-        :param str_code     股票的代码
-        :order_id           order ID
-        :param price        当前order的bid/ask的价格
-        :param volume       当前order的bid/ask的数量
-        :param direction    order是买入还是卖出        
-        :return The order and the list of trades.
-                Empty list if there is no matching.
+        Feed queue
+        When a new order arrived, update the current order_id and put it into the queue if valid
+        """
+        order = self._recv_order()
+        self._check_order(order)
+
+        if self.order_books.get(order.stk_code) is None:
+            self._new_stock_symbol(order.stk_code)
+        
+        if order.order_id == self.next_order_id[order.stk_code]:        # if hit next order_id
+            self._put_queue_valid_order(order.stk_code, order)
+            
+            # if the next id has already been waiting in cache
+            while self.order_cache[order.stk_code].get(self.next_order_id[order.stk_code]) is not None:
+                order = self.order_cache[order.stk_code].pop(self.next_order_id[order.stk_code]) 
+                self._put_queue_valid_order(order.stk_code, order)
+
+        else: 
+            self.order_cache[order.stk_code][order.order_id] = order
+
+
+    def handle_order_all_stocks_thread(self):
+        """
+        Consume queue
+        Read reordered orders from the queue, and handle them according to order types
+        """
+        order = self._get_queue_valid_order()
+        order_type = order.type 
+        stock = order.stk_code
+        if order_type == OrderType.LIMIT_ORDER:
+            trades, quotes = self.order_books[stock].handle_order_limit(order.to_suborder())
+        elif order_type == OrderType.COUNTER_PARTY_BEST_PRICE_ORDER: 
+            trades, quotes = self.order_books[stock].handle_order_counter_side_optimal(order.to_suborder())
+        elif order_type == OrderType.OUR_BEST_PRICE_ORDER:
+            trades, quotes = self.order_books[stock].handle_order_own_side_optimal(order.to_suborder())
+        elif order_type == OrderType.TOP_FIVE_INS_TRANS_REMAIN_CANCEL_ORDER:
+            trades, quotes = self.order_books[stock].handle_order_best_five(order.to_suborder())
+        elif order_type == OrderType.IMMEDIATE_TRANS_REMAIN_CANCEL_ORDER:
+            trades, quotes = self.order_books[stock].handle_order_immediate_transact(order.to_suborder())
+        elif order_type == OrderType.FULL_DEAL_OR_CANCEL_ORDER:
+            trades, quotes = self.order_books[stock].handle_order_full_deal(order.to_suborder())
+        
+        self._send_feed(trades, quotes)
+
+
+    def engine_main_thread(self):
+        """
+        start up threads here
         """
         pass
-    def change_order(self, order_id, str_code):
-        """
-        Cancel order
-        :param order_id     order ID
-        :param str_code     股票代码
-        :return The order if the cancellation is successful
-        """
-        pass
+
+
+        
 
     

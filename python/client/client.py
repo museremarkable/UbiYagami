@@ -169,18 +169,17 @@ class Client:
         #this implementation only works for small data(100x10x10 0.06 per stock 100x100x100 35s per stock, 100x1000x1000 1240s per stock, it's unaccecptable)
         for curr_stock_id in range(10):
             #print(curr_stock_id)
-            curr_order_id_page = reduce(add ,order_id_mtx[curr_stock_id])
-            curr_direction_page = reduce(add ,direction_mtx[curr_stock_id])
-            curr_price_page = reduce(add ,price_mtx[curr_stock_id])
-            curr_volumn_page = reduce(add ,volume_mtx[curr_stock_id])
-            curr_type_page = reduce(add ,type_mtx[curr_stock_id])
+            curr_order_id_page = order_id_mtx[curr_stock_id].reshape(-1)
+            curr_direction_page = direction_mtx[curr_stock_id].reshape(-1)
+            curr_price_page = price_mtx[curr_stock_id].reshape(-1)
+            curr_volumn_page = volume_mtx[curr_stock_id].reshape(-1)
+            curr_type_page = type_mtx[curr_stock_id].reshape(-1)
             for i in range(1, per_stock_page_number):
-                print(i)
-                temp_order_id_page = reduce(add ,order_id_mtx[i * 10 + curr_stock_id])
-                temp_direction_page = reduce(add ,direction_mtx[i * 10 + curr_stock_id])
-                temp_price_page = reduce(add ,price_mtx[i * 10 + curr_stock_id])
-                temp_volume_page = reduce(add ,volume_mtx[i * 10 + curr_stock_id])
-                temp_type_page = reduce(add ,type_mtx[i * 10 + curr_stock_id])
+                temp_order_id_page = order_id_mtx[i * 10 + curr_stock_id].reshape(-1)
+                temp_direction_page = direction_mtx[i * 10 + curr_stock_id].reshape(-1)
+                temp_price_page = price_mtx[i * 10 + curr_stock_id].reshape(-1)
+                temp_volume_page = volume_mtx[i * 10 + curr_stock_id].reshape(-1)
+                temp_type_page = type_mtx[i * 10 + curr_stock_id].reshape(-1)
                 curr_order_id_page = np.concatenate((curr_order_id_page,temp_order_id_page))
                 curr_direction_page = np.concatenate((curr_direction_page, temp_direction_page))
                 curr_price_page = np.concatenate((curr_price_page, temp_price_page))
@@ -206,6 +205,7 @@ class Client:
         """
         communicate all data with server
         """
+        """
         stock_1_task = asyncio.create_task(
             self.communicate_single_stock_with_server(0))
         stock_2_task = asyncio.create_task(
@@ -227,7 +227,7 @@ class Client:
         stock_10_task = asyncio.create_task(
             self.communicate_single_stock_with_server(9))
         ret = await asyncio.gather(stock_1_task, stock_2_task, stock_3_task, stock_4_task, stock_5_task, stock_6_task, stock_7_task, stock_8_task, stock_9_task, stock_10_task)            
-    
+        """
     async def communicate_single_stock_with_server(self, stock_id) -> list:
         """
         input is one stock data and stock id, communicate with two server , get the trade and then write it into corresponding trade file

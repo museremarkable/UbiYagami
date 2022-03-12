@@ -1,5 +1,6 @@
 from cProfile import run
 import imp
+import tarfile
 from python.connection.connection import ClientTCP
 import h5py
 from enum import IntEnum
@@ -131,16 +132,16 @@ class Client:
 
     def __init__(self, client_id, data_file_path, res_file_path):
 
-        self.trade_list = []
+        self.trade_list = [[]] * 10
         # client_id used to identify different client server
         self.client_id = client_id
         self.all_page = []
         self.data_file_path = data_file_path
         self.res_file_path = res_file_path
         self.hook_mtx = h5py.File(data_file_path + '/' + "hook.h5", 'r')['hook']
-
+        self.hook_position = [0] * 10
     
-    # asynchronous process data, 10 stock, when have already read one stock then send this stock to server, on the same time process next stock data
+    # process all data, alter that then trans these data
     def data_read(self):
         """
         read all data from file
@@ -230,25 +231,55 @@ class Client:
         input is one stock data and stock id, communicate with two server , get the trade and then write it into corresponding trade file
         """
         """
-        读入
+        每次传输一个order class的数据
+        首先根据stock_id读入对应的股票数据， 然后按order_id顺序进行传输。 
+        传输时，首先在hook矩阵中判断是否需要传输，(func order_id_need_to_trans)
+        不需要：除stock_id和order_id外其它参数全部置0
+        需要：json文件格式传输
+
         """
         data_length = self.all_page[stock_id].shape[0]
-        
-        
-        self.trade_list = ClientTCP(curr_order_page, stock_id, hook)
-        self.dump_trade(self.trade_list, save_path, stock_id)
+        if self.order_is_need_to_tans(order_id, stock_id):
+            #here begin trans corresponding order_id
+            #to do
+            #todo 当接收到传回的结果后，需要将其append到对应的self.trade_list中
+
+            
+            print("todo")
+        else:
+            print("Todo")
+            #only trans order_id and stock_id, other parameter is 0
+            #to do 
+    def order_is_need_to_tans(self, order_id, stock_id):
+        if self.order_id < self.hook_mtx[stock_id][self.hook_position[stock_id]][0]:
+            return True
+        elif self.order_id == self.hook_mtx[stock_id][self.hook_position[stock_id]][0]:
+            target_stk_code = self.hook_mtx[stock_id][self.hook_position[stock_id]][1]
+            target_trade_idx = self.hook_mtx[stock_id][self.hook_position[stock_id]][2]
+            arg = self.hook_mtx[stock_id][self.hook_position[stock_id]][3]
+            if self.trade_list[target_stk_code][target_trade_idx - 1] < arg:
+                self.hook_position[stock_id] += 1
+                return True
+            else:
+                self.hook_position[stock_id] += 1
+                return False
+        else:
+            raise ValueError("order_id必须小于等于hook中对应的order_id")
 
 
-    def dump_trade(self, trade_list, save_path, stock_id):
+            
+            
+            
+    def dump_trade(self, stock_id):
         """
         read trade_list, tans every trade into a 12 byte 
         :param trade_list       结果        
         :param save_path        the folder path where res save
         :return none
         """
-        res_file_path = save_path + '/' + str(stock_id)
+        res_file_path = self.res_file_path + '/' + 'trade' + str(stock_id)
         with open(res_file_path, 'wb') as f:
-            f.write(b''.join(map(lambda x: x.to_bytes(), trade_list)))
+            f.write(b''.join(map(lambda x: x.to_bytes(), self.trade_list[stock_id])))
 
 
 parser = ArgumentParser()
@@ -260,4 +291,6 @@ args = parser.parse_args()
 Trader_Server = Client(args[2])
 Trader_Server.data_read(args[0], args[1])
 asyncio.run(Trader_Server.communicate_with_server())
-
+#todo暂时把接受数据与写文件解耦，后续tcp部分完成后和tcp部分写到一起
+for i in range(10):
+    Trader_Server.dump_trade(i)

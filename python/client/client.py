@@ -18,6 +18,8 @@ import asyncio
 from argparse import ArgumentParser
 import numpy as np
 from data_type import OrderType, DirectionType, OperationType, Order, Quote, Trade
+from functools import reduce
+from operator import add
 #from python.server.server import BuySide, OrderType
 #from server.server import Order
 
@@ -135,7 +137,7 @@ class Client:
         self.trade_list = [[]] * 10
         # client_id used to identify different client server
         self.client_id = client_id
-        self.all_page = []
+        self.all_page = [[]] * 10
         self.data_file_path = data_file_path
         self.res_file_path = res_file_path
         self.hook_mtx = h5py.File(data_file_path + '/' + "hook.h5", 'r')['hook']
@@ -167,18 +169,18 @@ class Client:
         #this implementation only works for small data(100x10x10 0.06 per stock 100x100x100 35s per stock, 100x1000x1000 1240s per stock, it's unaccecptable)
         for curr_stock_id in range(10):
             #print(curr_stock_id)
-            curr_order_id_page = np.array(order_id_mtx)[curr_stock_id].flatten()
-            curr_direction_page = np.array(direction_mtx)[curr_stock_id].flatten()
-            curr_price_page = np.array(price_mtx)[curr_stock_id].flatten()
-            curr_volumn_page = np.array(volume_mtx)[curr_stock_id].flatten()
-            curr_type_page = np.array(type_mtx)[curr_stock_id].flatten()
+            curr_order_id_page = reduce(add ,order_id_mtx[curr_stock_id])
+            curr_direction_page = reduce(add ,direction_mtx[curr_stock_id])
+            curr_price_page = reduce(add ,price_mtx[curr_stock_id])
+            curr_volumn_page = reduce(add ,volume_mtx[curr_stock_id])
+            curr_type_page = reduce(add ,type_mtx[curr_stock_id])
             for i in range(1, per_stock_page_number):
                 print(i)
-                temp_order_id_page = np.array(order_id_mtx)[i * 10 + curr_stock_id].flatten()
-                temp_direction_page = np.array(direction_mtx)[i * 10 + curr_stock_id].flatten()
-                temp_price_page = np.array(price_mtx)[i * 10 + curr_stock_id].flatten()
-                temp_volume_page = np.array(volume_mtx)[i * 10 + curr_stock_id].flatten()
-                temp_type_page = np.array(type_mtx)[i * 10 + curr_stock_id].flatten()
+                temp_order_id_page = reduce(add ,order_id_mtx[i * 10 + curr_stock_id])
+                temp_direction_page = reduce(add ,direction_mtx[i * 10 + curr_stock_id])
+                temp_price_page = reduce(add ,price_mtx[i * 10 + curr_stock_id])
+                temp_volume_page = reduce(add ,volume_mtx[i * 10 + curr_stock_id])
+                temp_type_page = reduce(add ,type_mtx[i * 10 + curr_stock_id])
                 curr_order_id_page = np.concatenate((curr_order_id_page,temp_order_id_page))
                 curr_direction_page = np.concatenate((curr_direction_page, temp_direction_page))
                 curr_price_page = np.concatenate((curr_price_page, temp_price_page))
@@ -238,6 +240,9 @@ class Client:
         需要：json文件格式传输
 
         """
+        """
+        EXAMPLE:  trade1传输的stock1的order_id
+        """
         data_length = self.all_page[stock_id].shape[0]
         if self.order_is_need_to_tans(order_id, stock_id):
             #here begin trans corresponding order_id
@@ -264,7 +269,21 @@ class Client:
                 self.hook_position[stock_id] += 1
                 return False
         else:
-            raise ValueError("order_id必须小于等于hook中对应的order_id")
+            while(self.hook_mtx[stock_id][self.hook_position[stock_id]][0] > self.order_id):
+                self.hook_position[stock_id] += 1
+            if self.order_id == self.hook_mtx[stock_id][self.hook_position[stock_id]][0]:
+                target_stk_code = self.hook_mtx[stock_id][self.hook_position[stock_id]][1]
+                target_trade_idx = self.hook_mtx[stock_id][self.hook_position[stock_id]][2]
+                arg = self.hook_mtx[stock_id][self.hook_position[stock_id]][3]
+                if self.trade_list[target_stk_code][target_trade_idx - 1] < arg:
+                    self.hook_position[stock_id] += 1
+                    return True
+                else:
+                    self.hook_position[stock_id] += 1
+                    return False
+            else:
+                return True                 
+            
 
 
             

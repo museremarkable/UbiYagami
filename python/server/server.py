@@ -1,10 +1,11 @@
+from sympy import Q
 from python.server.data_type import Order, MinOrder, Trade, OrderType, DirectionType, Quote
 from python.server.data_type import OperationType, SubOrder
 from typing import List, Dict, Tuple, Sequence
 from multiprocessing import Queue, Process
 import logging
 from time import sleep
-
+import h5py
 
 logging.basicConfig(level=logging.DEBUG #设置日志输出格式
                     ,filename="exchange_runtime.log" #log日志输出的文件位置和文件名
@@ -150,8 +151,6 @@ class OrderLink:
 
         quotes = Quote(self.stock, order_removed.order_id, self.price, order_removed.volume, self.op_remove)
         return [quotes]
-
-
 
 class OrderBook:
     """
@@ -497,39 +496,78 @@ class MatchingEngine:
     * order id sorting
     * order checking (out of price range limit, volume>0, price>0, id>0)
     """
-    def __init__(self):
+    def __init__(self, path_close="data_test/100x10x10/price1.h5"):
         self.order_books = {}       # order book of different stocks
         self.next_order_id = {}
         self.book_read_queue = Queue()
         self.order_cache = {}   # list of dicts
+        # data_file_path = 'data_test/100x10x10'
+        # prev_price_path = data_file_path + '/'+ "price1.h5"
+        price_mtx = h5py.File(path_close, 'r')['prev_close']
+        self.flip_unit = 0.01
+        self.limit = list(map(self._limit_calculate, price_mtx))
 
         self.connect = None     # TODO TBA
 
+
+    def _limit_calculate(self, close):
+        upper = round(close*1.1, 2)
+        lower = round(close*0.9, 2)
+        upper = upper if upper > close+self.flip_unit else close+self.flip_unit 
+        lower = lower if lower < close-self.flip_unit else close-self.flip_unit
+        return upper, lower
+
     def _recv_order(self) -> Order:
-        pass
+        return self.connect.recv()
 
     def _send_feed(self, trades: List[Trade], quotes: List[Quote]):
-        pass
-    
+        for x in trades:
+            self.connect.send({'trade':x})
+        for x in quotes:
+            self.connect.send({'quote': x})
+
+
     def _check_order(self, order: Order):
-        pass
-        if order.order_id < 0: logging.error(f"Order ID: {order.order_id} < 0")
-        if order.volume < 0: logging.error(f"Order ID: {order.order_id} - volume {order.volume} < 0")  # volume == 0 for void order indicating that the hook is not triggered
-        if order.price <= 0: logging.error(f"Order ID: {order.order_id} - price {order.price} <= 0")
-        if order.type > 5: logging.error(f"Order ID: {order.order_id} - invalid order type {order.type}")
+        valid = True
+        if order.order_id < 0: 
+            logging.error(f"Order ID: {order.order_id} < 0")
+            valid = False
+        if order.volume < 0: 
+            logging.error(f"Order ID: {order.order_id} - volume {order.volume} < 0")  # volume == 0 for void order indicating that the hook is not triggered
+            valid = False
+        if order.volume == 0: 
+            logging.info(f"Order ID: {order.order_id} - volume == 0, is empty order")  # volume == 0 for void order indicating that the hook is not triggered
+            valid = False
+        if order.price <= 0: 
+            logging.error(f"Order ID: {order.order_id} - price {order.price} <= 0")
+            valid = False
+        if order.type > 5: 
+            logging.error(f"Order ID: {order.order_id} - invalid order type {order.type}")
+            valid = False
+        if order.price > self.limit[order.stk_code][0] or order.price < self.limit[order.stk_code][1]:  # price range limit
+            logging.warning(f"Order ID: {order.order_id} - price {order.price} exceeds limit {self.limit[order.stk_code]}")
+            valid = False
+
+        return valid 
+
 
     def _new_stock_symbol(self, stock):
         self.order_books[stock] = OrderBook(stock)
         self.next_order_id[stock] = 1
         self.order_cache[stock] = {}        # price -> Order
 
+
     def _put_queue_valid_order(self, stock, order: Order):
         self.next_order_id[stock] += 1
-        if order.volume != 0:               # if not empty hook
+        if self._check_order(order):               # if is valid order
             self.book_read_queue.put(order)
+        else:
+            logging.info(f"Order ID: {order.order_id} - order discarded")
+
     
     def _get_queue_valid_order(self):
         return self.book_read_queue.get(block=True)
+
 
     def update_order_queue_thread(self, order: Order):
         """
@@ -537,19 +575,15 @@ class MatchingEngine:
         When a new order arrived, update the current order_id and put it into the queue if valid
         """
         order = self._recv_order()
-        self._check_order(order)
-
         if self.order_books.get(order.stk_code) is None:
             self._new_stock_symbol(order.stk_code)
         
         if order.order_id == self.next_order_id[order.stk_code]:        # if hit next order_id
             self._put_queue_valid_order(order.stk_code, order)
-            
             # if the next id has already been waiting in cache
             while self.order_cache[order.stk_code].get(self.next_order_id[order.stk_code]) is not None:
                 order = self.order_cache[order.stk_code].pop(self.next_order_id[order.stk_code]) 
                 self._put_queue_valid_order(order.stk_code, order)
-
         else: 
             self.order_cache[order.stk_code][order.order_id] = order
 
@@ -562,6 +596,7 @@ class MatchingEngine:
         order = self._get_queue_valid_order()
         order_type = order.type 
         stock = order.stk_code
+        logging.info(f"Order ID: {order.order_id} - {order_type} order executing")
         if order_type == OrderType.LIMIT_ORDER:
             trades, quotes = self.order_books[stock].handle_order_limit(order.to_suborder())
         elif order_type == OrderType.COUNTER_PARTY_BEST_PRICE_ORDER: 

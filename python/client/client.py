@@ -280,7 +280,7 @@ class Client:
                 if len(self.trade_list[stock_id]) < target_trade_idx:
                     print("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook")
                     print("stock %d wait 10 seconds")
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(3)
                 else:
                     break
             
@@ -300,9 +300,9 @@ class Client:
                 arg = self.hook_mtx[stock_id][self.hook_position[stock_id]][3]
                 while True:
                     if len(self.trade_list[stock_id]) < target_trade_idx:
-                        print("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook")
-                        print("stock %d wait 10 seconds")
-                        await asyncio.sleep(5)
+                        print("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook" %(target_stk_code, stock_id, order_id))
+                        print("stock %d wait 3 seconds" % (stock_id))
+                        await asyncio.sleep(3)
                     else:
                         break
                 if self.trade_list[target_stk_code][target_trade_idx - 1] < arg:
@@ -329,15 +329,15 @@ class Client:
         with open(res_file_path, 'wb') as f:
             f.write(b''.join(map(lambda x: x.to_bytes(), self.trade_list[stock_id])))
 parser = ArgumentParser()
-parser.add_argument("-f", "--file",  help="data file folder path")
-parser.add_argument("-r", "--res",  help="result folder path")
+parser.add_argument("-f", "--filepath",  help="data file folder path")
+parser.add_argument("-r", "--respath",  help="result folder path")
 parser.add_argument("-c", "--client_id",  help="client_id, which is 1 or 2")
 args = parser.parse_args()
 send_queue = asyncio.Queue()
 reveive_queue = asyncio.Queue()
-Trader_Server = Client(args[2])
-Trader_Server.data_read(args[0], args[1])
+Trader_Server = Client(args.client_id)
+Trader_Server.data_read(args.filepath, args.respath)
 asyncio.run(Trader_Server.communicate_with_server(send_queue, reveive_queue))
 #todo暂时把接受数据与写文件解耦，后续tcp部分完成后和tcp部分写到一起
 for i in range(10):
-    Trader_Server.store_all_trade(i)
+    Trader_Server.store_all_trade(i + 1)

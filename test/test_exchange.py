@@ -299,15 +299,15 @@ class TestOrderBook(unittest.TestCase):
 		self.orderbook = orderbook
 
 		'''
-		bid 	price	ask
-				125		10
-				124		5
-				123		30
-				122		20
-		20		120
-		10		119
-		30		118
-		5		117
+		id	bid 	price	ask	id
+					125		10	8
+					124		5	7
+					123		30	3
+					122		20	5
+		2	20		120
+		6	10		119
+		1	30		118
+		4	5		117
 		'''
 
 	def test_handle_limit(self):
@@ -319,8 +319,25 @@ class TestOrderBook(unittest.TestCase):
 		volumes = [10, 25, 20, 10]
 		orders = [ 	SubOrder(Id, DirectionType.BUY, pr, vl) 
 					for Id, pr, vl in zip(orderIds, prices, volumes) ]
+		true_q = [
+						Quote(2, 9, 118, 10, OperationType.NEW_BID),
+						Quote(2, 5, 122, 20, OperationType.REMOVE_ASK),
+						Quote(2, 10, 122, 5, OperationType.NEW_BID),
+						Quote(2, 3, 123, -20, OperationType.AMEND_ASK),
+						Quote(2, 12, 121, 10, OperationType.NEW_BID),
+		]
+		true_t = [
+						Trade(2, 10, 5, 122, 20),
+						Trade(2, 13, 3, 123, 20)
+		]
+		trades = []
+		quotes = []
 		for order in orders:
-			orderbook.handle_order_limit(order)
+			this_trades, this_quotes = orderbook.handle_order_limit(order)
+			trades += this_trades
+			quotes += this_quotes
+		self.assertEqual(0, sum(list(map(quote_comp, true_q, quotes))))
+		self.assertEqual(0, sum(list(map(quote_comp, true_t, trades))))
 
 		book = orderbook.get_price_depth()
 		true_book = {

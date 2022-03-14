@@ -3,6 +3,7 @@ from python.server.data_type import Order, MinOrder, Trade, OrderType, Direction
 from python.server.data_type import OperationType, SubOrder
 from typing import List, Dict, Tuple, Sequence
 from multiprocessing import Queue, Process
+from multiprocessing.managers import BaseManager 
 import logging
 from time import sleep
 import h5py
@@ -83,7 +84,7 @@ class OrderLink:
         volume_remain = miniorder.volume
         for i, link_order in enumerate(link):
             volume_remain -= link_order.volume
-            if volume_remain < 0:
+            if volume_remain <= 0:
                 # Only when the link has rest orders, will it be update; 
                 # Otherwise, nothing will change, it will be remove from the orderbook from outside
                 volume_diff = link_order.volume+volume_remain
@@ -93,13 +94,17 @@ class OrderLink:
 
                 cum -= volume_diff
                 self.cum = cum
-                quote = Quote(self.stock, link_order.order_id, self.price, volume_diff, self.op_amend)
+                if order_remain == 0:
+                    quote = Quote(self.stock, link_order.order_id, self.price, volume_diff, self.op_remove)
+                else:
+                    quote = Quote(self.stock, link_order.order_id, self.price, -volume_diff, self.op_amend)
                 if self.side: # is bid side
                     trade = Trade(self.stock, link_order.order_id, miniorder.order_id, self.price, volume_diff)
                 else:
                     trade = Trade(self.stock, miniorder.order_id, link_order.order_id, self.price, volume_diff)
                 quotes.append(quote)
                 trades.append(trade)
+                break
             
             cum -= link_order.volume
             # TODO can cancel this branch for better performance?
@@ -439,6 +444,8 @@ class OrderBook:
             quotes += this_quotes
             if order_remain.volume == 0:  
                 # the order is all filled
+                if orderlink.cum == 0:
+                    self._remove_price_level(book_price, oppo_side)
                 is_remained = False
                 break
             else:
@@ -447,6 +454,7 @@ class OrderBook:
 
         if is_remained:     
             # if still volume remained after matching
+            logging.info(f"Order ID: {order.order_id} - {OrderType.IMMEDIATE_TRANS_REMAIN_CANCEL_ORDER} Not fully filled, withdraw the rest")
             pass # TODO can do remaining order cancel feedback?
 
         return trades, quotes
@@ -470,6 +478,8 @@ class OrderBook:
             quotes += this_quotes
             if order_remain.volume == 0:  
                 # the order is all filled
+                if orderlink.cum == 0:
+                    levels_to_remove.append(price)
                 is_remained = False
                 break
             levels_to_remove.append(price)
@@ -499,7 +509,8 @@ class MatchingEngine:
     def __init__(self, path_close="data_test/100x10x10/price1.h5"):
         self.order_books = {}       # order book of different stocks
         self.next_order_id = {}
-        self.book_read_queue = Queue()
+        self.order_queue = Queue()
+        self.feed_queue = Queue()
         self.order_cache = {}   # list of dicts
         # data_file_path = 'data_test/100x10x10'
         # prev_price_path = data_file_path + '/'+ "price1.h5"
@@ -544,8 +555,8 @@ class MatchingEngine:
         if order.type > 5: 
             logging.error(f"Order ID: {order.order_id} - invalid order type {order.type}")
             valid = False
-        if order.price > self.limit[order.stk_code][0] or order.price < self.limit[order.stk_code][1]:  # price range limit
-            logging.warning(f"Order ID: {order.order_id} - price {order.price} exceeds limit {self.limit[order.stk_code]}")
+        if order.price > self.limit[order.stk_code-1][0] or order.price < self.limit[order.stk_code-1][1]:  # price range limit
+            logging.warning(f"Order ID: {order.order_id} - price {order.price} exceeds limit {self.limit[order.stk_code-1]}")
             valid = False
 
         return valid 
@@ -556,36 +567,58 @@ class MatchingEngine:
         self.next_order_id[stock] = 1
         self.order_cache[stock] = {}        # price -> Order
 
+    def _put_queue_feeds(self, trades, quotes):
+        self.feed_queue.put((trades, quotes))
+        return
 
-    def _put_queue_valid_order(self, stock, order: Order):
-        self.next_order_id[stock] += 1
+    def _get_queue_feeds(self) -> Tuple[List[Trade], List[Quote]]:
+        if not self.feed_queue.empty():
+            return self.feed_queue.get()
+        else: 
+            return None, None
+
+    def _put_queue_valid_order(self, order: Order):
+        self.next_order_id[order.stk_code] += 1
         if self._check_order(order):               # if is valid order
-            self.book_read_queue.put(order)
+            self.order_queue.put(order)
         else:
             logging.info(f"Order ID: {order.order_id} - order discarded")
 
     
     def _get_queue_valid_order(self):
-        return self.book_read_queue.get(block=True)
+        return self.order_queue.get(block=True)
 
 
-    def update_order_queue_thread(self, order: Order):
+    def update_order_queue_thread(self, order_queue: Queue, feed_queue: Queue):
         """
         Feed queue
         When a new order arrived, update the current order_id and put it into the queue if valid
         """
-        order = self._recv_order()
-        if self.order_books.get(order.stk_code) is None:
-            self._new_stock_symbol(order.stk_code)
-        
-        if order.order_id == self.next_order_id[order.stk_code]:        # if hit next order_id
-            self._put_queue_valid_order(order.stk_code, order)
-            # if the next id has already been waiting in cache
-            while self.order_cache[order.stk_code].get(self.next_order_id[order.stk_code]) is not None:
-                order = self.order_cache[order.stk_code].pop(self.next_order_id[order.stk_code]) 
-                self._put_queue_valid_order(order.stk_code, order)
-        else: 
-            self.order_cache[order.stk_code][order.order_id] = order
+        self.feed_queue = feed_queue
+        self.order_queue = order_queue
+        while True:
+            order = self._recv_order()
+            if self.order_books.get(order.stk_code) is None:
+                self._new_stock_symbol(order.stk_code)
+            
+            if order.order_id == self.next_order_id[order.stk_code]:        # if hit next order_id
+                self._put_queue_valid_order(order)
+                # if the next id has already been waiting in cache
+                while self.order_cache[order.stk_code].get(self.next_order_id[order.stk_code]) is not None:
+                    order = self.order_cache[order.stk_code].pop(self.next_order_id[order.stk_code]) 
+                    self._put_queue_valid_order(order)
+            else: 
+                self.order_cache[order.stk_code][order.order_id] = order
+
+            trades, quotes = self._get_queue_feeds()
+            if trades is not None:
+                minlen = len(trades)
+                for i in range(minlen):
+                    self._send_feed({'trade':trades[i], 'quote':quotes[i]})
+                for q in quotes[minlen:]:
+                    self._send_feed({'quote':q})
+
+
 
 
     def handle_order_all_stocks_thread(self):
@@ -610,7 +643,7 @@ class MatchingEngine:
         elif order_type == OrderType.FULL_DEAL_OR_CANCEL_ORDER:
             trades, quotes = self.order_books[stock].handle_order_full_deal(order.to_suborder())
         
-        self._send_feed(trades, quotes)
+        self._put_queue_feeds(trades, quotes)
 
 
     def engine_main_thread(self):
@@ -618,6 +651,7 @@ class MatchingEngine:
         start up threads here
         """
         pass
+
 
 
         

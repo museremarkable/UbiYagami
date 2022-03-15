@@ -1,3 +1,4 @@
+from asyncore import poll
 from cProfile import run
 import imp
 import tarfile
@@ -137,7 +138,7 @@ class Client:
         self.trade_list = [[]] * 10
         # client_id used to identify different client server
         self.client_id = client_id
-        self.all_page = [[]] * 10
+        self.all_page = []
         self.data_file_path = data_file_path
         self.res_file_path = res_file_path
         self.hook_mtx = h5py.File(data_file_path + '/' + "hook.h5", 'r')['hook']
@@ -148,7 +149,7 @@ class Client:
         """
         read all data from file
         """
-        order_id_path = self.data_file_path +'/'+ "order" + str(self.client_id) + ".h5"
+        order_id_path = self.data_file_path +'/'+ "order_id" + str(self.client_id) + ".h5"
         direction_path = self.data_file_path + '/'+ "direction" + str(self.client_id) + ".h5"
         price_path = self.data_file_path + '/'+ "price" + str(self.client_id) + ".h5"
         volume_path = self.data_file_path + '/'+ "volume" + str(self.client_id) + ".h5"
@@ -164,7 +165,7 @@ class Client:
         data_page_number = order_id_mtx.shape[0]
         data_row_number = order_id_mtx.shape[1]
         data_column_number = order_id_mtx.shape[2]        
-        per_stock_page_number = data_page_number / 10
+        per_stock_page_number = data_page_number // 10
         #data transform
         #this implementation only works for small data(100x10x10 0.06 per stock 100x100x100 35s per stock, 100x1000x1000 1240s per stock, it's unaccecptable)
         for curr_stock_id in range(10):
@@ -201,67 +202,88 @@ class Client:
             
             # asynchronous send data
             #await self.communicate_with_server(curr_order_page, hook_mtx, curr_stock_id, res_file_path)
-    async def communicate_with_server(self):
+    async def communicate_with_server(self, send_queue, receive_queue):
         """
         communicate all data with server
         """
-        """
+        
         stock_1_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(0))
+            self.communicate_single_stock_with_server(0, send_queue))
         stock_2_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(1))
+            self.communicate_single_stock_with_server(1, send_queue))
         stock_3_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(2))
+            self.communicate_single_stock_with_server(2, send_queue))
         stock_4_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(3))        
+            self.communicate_single_stock_with_server(3, send_queue))        
         stock_5_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(4))
+            self.communicate_single_stock_with_server(4, send_queue))
         stock_6_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(5))
+            self.communicate_single_stock_with_server(5, send_queue))
         stock_7_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(6))
+            self.communicate_single_stock_with_server(6, send_queue))
         stock_8_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(7))
+            self.communicate_single_stock_with_server(7, send_queue))
         stock_9_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(8))
+            self.communicate_single_stock_with_server(8, send_queue))
         stock_10_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(9))
-        ret = await asyncio.gather(stock_1_task, stock_2_task, stock_3_task, stock_4_task, stock_5_task, stock_6_task, stock_7_task, stock_8_task, stock_9_task, stock_10_task)            
+            self.communicate_single_stock_with_server(9, send_queue))
+        receive_task = asyncio.create_task(
+            self.read_trade_data_from_queue(receive_queue)
+            )
+        ret = await asyncio.gather(stock_1_task, stock_2_task, stock_3_task, stock_4_task, stock_5_task, stock_6_task, stock_7_task, stock_8_task, stock_9_task, stock_10_task, receive_task)            
+        
+    async def communicate_single_stock_with_server(self, stock_id, send_queue):
         """
-    async def communicate_single_stock_with_server(self, stock_id) -> list:
+        put data in a queue
         """
-        input is one stock data and stock id, communicate with two server , get the trade and then write it into corresponding trade file
-        """
-        """
-        每次传输一个order class的数据
-        首先根据stock_id读入对应的股票数据， 然后按order_id顺序进行传输。 
-        传输时，首先在hook矩阵中判断是否需要传输，(func order_id_need_to_trans)
-        不需要：除stock_id和order_id外其它参数全部置0
-        需要：json文件格式传输
-
-        """
-        """
-        EXAMPLE:  trade1传输的stock1的order_id
-        """
-        data_length = self.all_page[stock_id].shape[0]
-        if self.order_is_need_to_tans(order_id, stock_id):
-            #here begin trans corresponding order_id
-            #to do
-            #todo 当接收到传回的结果后，需要将其append到对应的self.trade_list中
-
+        print("start put orderid %d of stock %d in queue")
+        
+        for i in range(len(self.all_page[stock_id])):
+            if self.order_is_need_to_tans(i, stock_id):
+                direction = DirectionType(self.all_page[stock_id][i][1])
+                price = self.all_page[stock_id][i][2]
+                volume = self.all_page[stock_id][i][3]
+                type = OrderType(self.all_page[stock_id][i][4])
+                tempdata = Order(stock_id, i, direction, price, volume, type)
+                    #here need to add some to avoid 
+                    #if corresponding trade_list number is 
+                if i % 20 == 1:
+                # a stock hook 1000 6 230 5
+                    await asyncio.sleep(2)
+                await send_queue.put(tempdata)
             
-            print("todo")
-        else:
-            print("Todo")
+            
+            else:
+                direction = DirectionType(self.all_page[stock_id][i][1])
+                type = OrderType(self.all_page[stock_id][i][4])
+                tempdata = Order(stock_id, i, direction, 0, 0, type)
+                await send_queue.put(tempdata)
             #only trans order_id and stock_id, other parameter is 0
             #to do 
-    def order_is_need_to_tans(self, order_id, stock_id):
-        if self.order_id < self.hook_mtx[stock_id][self.hook_position[stock_id]][0]:
+   
+
+
+    async def order_is_need_to_tans(self, order_id, stock_id):
+        """
+        use to determine whther this order need to send
+        """
+        if order_id < self.hook_mtx[stock_id][self.hook_position[stock_id]][0]:
+            # if this order id is smaller than the first hook orderid, definetely need to send
             return True
-        elif self.order_id == self.hook_mtx[stock_id][self.hook_position[stock_id]][0]:
+        elif order_id == self.hook_mtx[stock_id][self.hook_position[stock_id]][0]:
+            # if this order id is in hook matrix, begin to see if volume is smaller than arg
             target_stk_code = self.hook_mtx[stock_id][self.hook_position[stock_id]][1]
             target_trade_idx = self.hook_mtx[stock_id][self.hook_position[stock_id]][2]
+            #todo: here need to use asyncio.Event to resolve condition when trader_list length is shorter than target_trade_idx
             arg = self.hook_mtx[stock_id][self.hook_position[stock_id]][3]
+            while True:
+                if len(self.trade_list[stock_id]) < target_trade_idx:
+                    print("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook")
+                    print("stock %d wait 10 seconds")
+                    await asyncio.sleep(3)
+                else:
+                    break
+            
             if self.trade_list[target_stk_code][target_trade_idx - 1] < arg:
                 self.hook_position[stock_id] += 1
                 return True
@@ -269,12 +291,20 @@ class Client:
                 self.hook_position[stock_id] += 1
                 return False
         else:
-            while(self.hook_mtx[stock_id][self.hook_position[stock_id]][0] > self.order_id):
+            #if order id is bigger than the current hook order_id, we need to add hook position to make it <= hook order id
+            while(self.hook_mtx[stock_id][self.hook_position[stock_id]][0] > order_id):
                 self.hook_position[stock_id] += 1
-            if self.order_id == self.hook_mtx[stock_id][self.hook_position[stock_id]][0]:
+            if order_id == self.hook_mtx[stock_id][self.hook_position[stock_id]][0]:
                 target_stk_code = self.hook_mtx[stock_id][self.hook_position[stock_id]][1]
                 target_trade_idx = self.hook_mtx[stock_id][self.hook_position[stock_id]][2]
                 arg = self.hook_mtx[stock_id][self.hook_position[stock_id]][3]
+                while True:
+                    if len(self.trade_list[stock_id]) < target_trade_idx:
+                        print("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook" %(target_stk_code, stock_id, order_id))
+                        print("stock %d wait 3 seconds" % (stock_id))
+                        await asyncio.sleep(3)
+                    else:
+                        break
                 if self.trade_list[target_stk_code][target_trade_idx - 1] < arg:
                     self.hook_position[stock_id] += 1
                     return True
@@ -282,34 +312,32 @@ class Client:
                     self.hook_position[stock_id] += 1
                     return False
             else:
-                return True                 
+                return True               
+    async def read_trade_data_from_queue(self, receive_queue):
+        #read data from trade data
+        while True:
+            trade_item = await reveive_queue.get()
+            if trade_item is None:
+                await asyncio.sleep(1)
+            else:
+                self.trade_list[trade_item.stock_id].append(trade_item)          
+            
             
 
-
-            
-            
-            
-    def dump_trade(self, stock_id):
-        """
-        read trade_list, tans every trade into a 12 byte 
-        :param trade_list       结果        
-        :param save_path        the folder path where res save
-        :return none
-        """
+    def store_all_trade(self, stock_id):
         res_file_path = self.res_file_path + '/' + 'trade' + str(stock_id)
         with open(res_file_path, 'wb') as f:
             f.write(b''.join(map(lambda x: x.to_bytes(), self.trade_list[stock_id])))
-
-
 parser = ArgumentParser()
-parser.add_argument("-f", "--file",  help="data file folder path")
-parser.add_argument("-r", "--res",  help="result folder path")
+parser.add_argument("-f", "--filepath",  help="data file folder path")
+parser.add_argument("-r", "--respath",  help="result folder path")
 parser.add_argument("-c", "--client_id",  help="client_id, which is 1 or 2")
 args = parser.parse_args()
-
-Trader_Server = Client(args[2])
-Trader_Server.data_read(args[0], args[1])
-asyncio.run(Trader_Server.communicate_with_server())
+send_queue = asyncio.Queue()
+reveive_queue = asyncio.Queue()
+Trader_Server = Client(args.client_id)
+Trader_Server.data_read(args.filepath, args.respath)
+asyncio.run(Trader_Server.communicate_with_server(send_queue, reveive_queue))
 #todo暂时把接受数据与写文件解耦，后续tcp部分完成后和tcp部分写到一起
 for i in range(10):
-    Trader_Server.dump_trade(i)
+    Trader_Server.store_all_trade(i + 1)

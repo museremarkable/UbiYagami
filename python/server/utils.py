@@ -1,4 +1,4 @@
-from python.server.data_type import *
+from data_type import *
 
 def order_comp(o1: Order, o2: Order):
 	comp = [o1.stk_code != o2.stk_code,

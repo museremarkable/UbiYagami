@@ -1,6 +1,6 @@
 
-from python.server.data_type import Order, MinOrder, Trade, OrderType, DirectionType, Quote
-from python.server.data_type import OperationType, SubOrder
+from data_type import Order, MinOrder, Trade, OrderType, DirectionType, Quote
+from data_type import OperationType, SubOrder
 from typing import List, Dict, Tuple, Sequence
 from multiprocessing import Queue, Process
 from multiprocessing.managers import BaseManager 
@@ -600,6 +600,56 @@ class MatchingEngine:
     def _get_queue_valid_order(self):
         return self.order_queue.get(block=True)
 
+    def _handle_order_all_stock_single_loop(self):
+        while not self.order_queue.empty():
+            order = self.order_queue.get()
+            order_type = order.type 
+            stock = order.stk_code
+            logging.info(f"Order ID: {order.order_id} - {order_type} order executing")
+            if order_type == OrderType.LIMIT_ORDER:
+                trades, quotes = self.order_books[stock].handle_order_limit(order.to_suborder())
+            elif order_type == OrderType.COUNTER_PARTY_BEST_PRICE_ORDER: 
+                trades, quotes = self.order_books[stock].handle_order_counter_side_optimal(order.to_suborder())
+            elif order_type == OrderType.OUR_BEST_PRICE_ORDER:
+                trades, quotes = self.order_books[stock].handle_order_own_side_optimal(order.to_suborder())
+            elif order_type == OrderType.TOP_FIVE_INS_TRANS_REMAIN_CANCEL_ORDER:
+                trades, quotes = self.order_books[stock].handle_order_best_five(order.to_suborder())
+            elif order_type == OrderType.IMMEDIATE_TRANS_REMAIN_CANCEL_ORDER:
+                trades, quotes = self.order_books[stock].handle_order_immediate_transact(order.to_suborder())
+            elif order_type == OrderType.FULL_DEAL_OR_CANCEL_ORDER:
+                trades, quotes = self.order_books[stock].handle_order_full_deal(order.to_suborder())
+            
+            self._put_queue_feeds(trades, quotes)
+
+    def serialize_main_run(self):
+        """
+        Without multiprocessing
+        """
+        while True:
+            order = self._recv_order()
+            if self.order_books.get(order.stk_code) is None:
+                self._new_stock_symbol(order.stk_code)
+            
+            if order.order_id == self.next_order_id[order.stk_code]:        # if hit next order_id
+                self._put_queue_valid_order(order)
+                # if the next id has already been waiting in cache
+                while self.order_cache[order.stk_code].get(self.next_order_id[order.stk_code]) is not None:
+                    order = self.order_cache[order.stk_code].pop(self.next_order_id[order.stk_code]) 
+                    self._put_queue_valid_order(order)
+            else: 
+                self.order_cache[order.stk_code][order.order_id] = order
+
+            self._handle_order_all_stock_single_loop()
+
+            while not self.feed_queue.empty():
+                trades, quotes = self.feed_queue.get()
+                if len(trades) !=0:
+                    minlen = len(trades)
+                    for i in range(minlen):
+                        self._send_feed({'trade':trades[i], 'quote':quotes[i]})
+                    for q in quotes[minlen:]:
+                        self._send_feed({'quote':q})
+
 
     def update_order_queue_thread(self): #, order_queue: Queue, feed_queue: Queue):
         """
@@ -623,8 +673,8 @@ class MatchingEngine:
             else: 
                 self.order_cache[order.stk_code][order.order_id] = order
 
-            trades, quotes = self._get_queue_feeds()
-            if trades is not None:
+            trades, quotes = self._get_queue_feeds()  # TODO improve message congestion blocking
+            if len(trades) !=0:
                 minlen = len(trades)
                 for i in range(minlen):
                     self._send_feed({'trade':trades[i], 'quote':quotes[i]})
@@ -670,11 +720,11 @@ class MatchingEngine:
             p = Process(target=self.handle_order_all_stocks_thread, args=())
             process_list.append(p)
 
-        for p in process_list:
-            p.start()
-
         p = Process(target=self.update_order_queue_thread, args=())
         process_list.append(p)
+
+        for p in process_list:
+            p.start()
 
         for p in process_list:
             p.join()

@@ -14,6 +14,7 @@ import time
 from argparse import ArgumentParser
 from data_type import OrderType, DirectionType, OperationType, Order, Quote, Trade
 import logging
+from connection.tcp_client import run_client
 logger = logging.getLogger()
 handler = logging.FileHandler('./ClientLogFile.log')
 logging.basicConfig(level=logging.DEBUG)
@@ -232,7 +233,7 @@ def communicate_with_server(send_queue, receive_queue, client_id, data_file_path
     """
     function to square a given list
     """
-    
+    run_client(send_queue, receive_queue)
 
 def write_result_to_file(receive_queue, res_file_path, client_id, trade_lists):
     """

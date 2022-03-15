@@ -87,14 +87,14 @@ class ClientTCP:
         asyncio.create_task(self.listen_for_messages('127.0.0.1', reader))
 
 
-def
-    order_queue = Queue()
-    response_queue = Queue()
-    count = 100
-    while count <= 120:
-        count += 1
-        order_queue.put(str(count)+'\n')
-        response_queue.put(str(count)+'\n')
+def run_client(order_queue, response_queue):
+    # order_queue = Queue()
+    # response_queue = Queue()
+    # count = 100
+    # while count <= 120:
+    #     count += 1
+    #     order_queue.put(str(count)+'\n')
+    #     response_queue.put(str(count)+'\n')
     # Client_run = ClientTCP(order_queue, response_queue)
     # asyncio.get_event_loop().run_until_complete(Client_run.run_without_retry())
     loop = asyncio.get_event_loop()

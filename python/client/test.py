@@ -1,10 +1,12 @@
 import h5py
 import sys
+import asyncio
+from sqlalchemy import func
 sys.path.append('F:/UbiYagami/python')
 from enum import IntEnum
-from connection.order_type import OrderTick
-from connection.pollable_queue import PollableQueue
+
 import logging
+'''
 logger = logging.getLogger()
 handler = logging.FileHandler('./client/ClientLogFile.log')
 logging.basicConfig(level=logging.DEBUG)
@@ -16,7 +18,13 @@ logger.info('This is a sample info messag%d %d'% (1, 2))
 logger.warning('This is a sample warning message')
 logger.error('This is a sample error message')
 logger.critical('This is a sample critical message')
-
+'''
+async def test():
+    print("begin to connect")
+    reader, writer = await asyncio.open_connection('139.224.57.153', 12347)
+    print(reader)
+    print(writer)
+asyncio.run(test())
 print("begin")
 '''
 parser = ArgumentParser()

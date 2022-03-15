@@ -1,5 +1,8 @@
+import os
 import sys
-sys.path.append('F:/UbiYagami/python')
+
+path = os.path.join(os.path.dirname(__file__), os.pardir)
+sys.path.append(path)
 from asyncore import poll
 from cProfile import run
 #import imp
@@ -23,7 +26,7 @@ import numpy as np
 from data_type import OrderType, DirectionType, OperationType, Order, Quote, Trade
 import logging
 logger = logging.getLogger()
-handler = logging.FileHandler('./client/ClientLogFile.log')
+handler = logging.FileHandler('./ClientLogFile.log')
 logging.basicConfig(level=logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s  %(name)s  %(levelname)s: %(message)s')
 logger.addHandler(handler)
@@ -226,6 +229,7 @@ class Client:
         """
         send_queue = asyncio.Queue(100)
         reveive_queue = asyncio.Queue(100)
+        send_queue.put
         stock_1_task = asyncio.create_task(
             self.communicate_single_stock_with_server(0, send_queue))
         stock_2_task = asyncio.create_task(
@@ -272,7 +276,7 @@ class Client:
                 await send_queue.put(tempdata)
                 logger.debug("put order_id %d of stock %d in send_queue" % (self.all_page[stock_id][i][0], stock_id))
                 #!!!!! only for test
-                await send_queue.get()
+                #await send_queue.get()
                 #await asyncio.sleep(1)
             
             else:
@@ -282,8 +286,8 @@ class Client:
                 await send_queue.put(tempdata)
                 logger.debug("put no nned to use order_id %d of stock %d in send_queue" % (self.all_page[stock_id][i][0], stock_id))
                 #!!!!! only for test
-                await send_queue.get()
-                await asyncio.sleep(1)
+                #await send_queue.get()
+                #await asyncio.sleep(1)
             #only trans order_id and stock_id, other parameter is 0
             #to do 
    
@@ -343,8 +347,8 @@ class Client:
         #read data from trade data
         while True:
             #!!!!! only for test
-            await receive_queue.put(Trade(1, 1, 1, 1, 1))
-            await asyncio.sleep(1)
+            #await receive_queue.put(Trade(1, 1, 1, 1, 1))
+            #await asyncio.sleep(1)
             logger.info("get trade result of stock %d while bid id is %d" % (1, 1))
             trade_item = await receive_queue.get()
             if trade_item is None:

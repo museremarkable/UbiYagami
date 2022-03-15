@@ -1,4 +1,4 @@
-from sympy import Q
+
 from python.server.data_type import Order, MinOrder, Trade, OrderType, DirectionType, Quote
 from python.server.data_type import OperationType, SubOrder
 from typing import List, Dict, Tuple, Sequence
@@ -8,7 +8,6 @@ import logging
 from time import sleep
 import h5py
 
-<<<<<<< HEAD
 logging.basicConfig(level=logging.DEBUG #设置日志输出格式
                     ,filename="exchange_runtime.log" #log日志输出的文件位置和文件名
                     ,filemode="w" #文件的写入格式，w为重新写入文件，默认是追加
@@ -159,8 +158,6 @@ class OrderLink:
         quotes = Quote(self.stock, order_removed.order_id, self.price, order_removed.volume, self.op_remove)
         return [quotes]
 
-=======
->>>>>>> 0834fc0f4544ad78adb8986eea1bb0c11f850a07
 class OrderBook:
     """
     data structure to store record

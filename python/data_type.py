@@ -45,6 +45,8 @@ class Order:
         convert into MinOrder type;
         """
         return MinOrder(self.order_id, self.volume)
+    
+
 
 
 class SubOrder:

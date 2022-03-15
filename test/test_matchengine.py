@@ -19,6 +19,22 @@ def order_comp(o1: Order, o2: Order):
             ]
 	return sum(comp)
 
+def quote_comp(q1, q2):
+	comp = [q1.stk_code != q2.stk_code,
+			q1.order_id != q2.order_id,
+			q1.price != q2.price,
+			q1.volume != q2.volume,
+			q1.operation != q2.operation]
+	return sum(comp)
+	
+def trade_comp(t1, t2):
+	comp = [t1.stk_code != t2.stk_code,
+			t1.bid_id != t2.bid_id,
+			t1.ask_id != t2.ask_id,
+			t1.price != t2.price,
+			t1.volume != t2.volume]
+	return sum(comp)
+
 def list_to_order(stk, x:list):
     stk = stk
     orderId = x[0]
@@ -58,7 +74,6 @@ class TestOrderLink(unittest.TestCase):
     def setUp(self):
         print ("do something before test : prepare environment.\n")
 
-
     def tearDown(self):
         print ("do something after test : clean up.\n")
 
@@ -92,4 +107,49 @@ class TestOrderLink(unittest.TestCase):
             self.assertEqual(0, res)
             i += 1
 
+    def _init_queue(self):
+        stk = [3]*8 + [5]*8
+        orderIds = [1,2,3,4,5,6,7,8,] * 2 
+        prices = [107.74, 104.3, 105.53, 103.01] * 2 + [204.74, 207.3, 201.53, 203.01] * 2
+        volumes = [5, 15, 20, 10] * 4
+        direction = [-1,1] * 8
+        orderType = [0,2,0,1,0,5,3,4] * 2
+        orders = [ 	list_to_order(s[0], s[1:] ) 
+                    for s in zip(stk, orderIds, direction, prices, volumes, orderType) ]
+        
+        # true_q = [
+        #             Quote(2, 1, 107.74)
+        # ]
 
+        self.engine._recv_order = mock.Mock(side_effect=orders)
+
+        order_q = Queue()
+        feed_q = Queue()
+        try:
+            self.engine.update_order_queue_thread(order_q, feed_q)
+        except StopIteration:
+            print('iteration stopped')
+
+        return order_q, feed_q
+
+
+    def test_matching(self):
+        order_q, feed_q = self._init_queue()
+        orders = []
+        while not order_q.empty():
+            orders.append(order_q.get())
+
+        self.engine.feed_queue = mock.Mock(return_value=feed_q)()
+        self.engine._get_queue_valid_order = mock.Mock(side_effect=orders)
+        try:
+            self.engine.handle_order_all_stocks_thread()
+        except StopIteration:
+            print('iteration stopped')
+
+        i = 0
+        self.assertEqual(False, feed_q.empty())
+        while not feed_q.empty():
+            trades, quotes = feed_q.get()
+            # res = order_comp()
+            # self.assertEqual(0, res)
+            i += 1

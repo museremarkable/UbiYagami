@@ -88,13 +88,15 @@ class OrderLink:
                 # Only when the link has rest orders, will it be update; 
                 # Otherwise, nothing will change, it will be remove from the orderbook from outside
                 volume_diff = link_order.volume+volume_remain
-                link[i].volume = -volume_remain
-                self.link = link[i:]        
-                volume_remain = 0
+                if volume_remain == 0:
+                    self.link = link[i+1:]        
+                else:
+                    link[i].volume = -volume_remain
+                    self.link = link[i:]        
 
                 cum -= volume_diff
                 self.cum = cum
-                if order_remain == 0:
+                if volume_remain == 0:
                     quote = Quote(self.stock, link_order.order_id, self.price, volume_diff, self.op_remove)
                 else:
                     quote = Quote(self.stock, link_order.order_id, self.price, -volume_diff, self.op_amend)
@@ -104,6 +106,8 @@ class OrderLink:
                     trade = Trade(self.stock, miniorder.order_id, link_order.order_id, self.price, volume_diff)
                 quotes.append(quote)
                 trades.append(trade)
+
+                volume_remain = 0
                 break
             
             cum -= link_order.volume
@@ -115,9 +119,6 @@ class OrderLink:
                 trade = Trade(self.stock, miniorder.order_id, link_order.order_id, self.price, link_order.volume)
             quotes.append(quote)
             trades.append(trade)
-
-            if volume_remain == 0:
-                break
 
         order_remain = MinOrder(miniorder.order_id, volume_remain)
         return order_remain, trades, quotes
@@ -366,17 +367,20 @@ class OrderBook:
 
         # match first, then store the remainder if any 
         orderlink = self._get_price_level(price, oppo_side)
-        order_remain, this_trades, this_quotes = orderlink.match_order(order_remain)
-        trades += this_trades
-        quotes += this_quotes
-        if order_remain.volume != 0:  
-            # still volume remained after matching, meaning the price level is consumed out.
-            # create level at this side at the order price
-            order.volume = order_remain.volume
-            self._remove_price_level(price, oppo_side)
-            order.price = price
-            this_quotes = self._create_price_level(order, side)
+        if orderlink is not None:
+            order_remain, this_trades, this_quotes = orderlink.match_order(order_remain)
+            trades += this_trades
             quotes += this_quotes
+            if order_remain.volume != 0:  
+                # still volume remained after matching, meaning the price level is consumed out.
+                # create level at this side at the order price
+                order.volume = order_remain.volume
+                self._remove_price_level(price, oppo_side)
+                order.price = price
+                this_quotes = self._create_price_level(order, side)
+                quotes += this_quotes
+        else:
+            logging.info(f"Order ID: {order.order_id} - opposite side optimal order discarded, order book empty. ")
 
         return trades, quotes
 
@@ -387,8 +391,11 @@ class OrderBook:
         quotes = []  
         price = self._get_best_price(side)
         orderlink = self._get_price_level(price, side)
-        this_quotes = orderlink.insert_order(order.to_minorder())
-        quotes += this_quotes
+        if orderlink is not None:
+            this_quotes = orderlink.insert_order(order.to_minorder())
+            quotes += this_quotes
+        else:
+            logging.info(f"Order ID: {order.order_id} - own side optimal order discarded, order book empty. ")
 
         return trades, quotes
 
@@ -423,6 +430,7 @@ class OrderBook:
         if is_remained:     
             # if still volume remained after matching
             pass # TODO can do remaining order cancel feedback?
+            logging.info(f"Order ID: {order.order_id} - {OrderType.TOP_FIVE_INS_TRANS_REMAIN_CANCEL_ORDER} Not fully filled, withdraw the rest. ")
 
         return trades, quotes
 
@@ -488,7 +496,7 @@ class OrderBook:
             # if still volume remained after matching
             trades = []
             quotes = []
-            pass # TODO can do remaining order cancel feedback?
+            logging.info(f"Order ID: {order.order_id} - {OrderType.FULL_DEAL_OR_CANCEL_ORDER} Not fully filled, cancel the order")
         else:
             for p in levels_to_remove:         # update levels
                 self._remove_price_level(p, oppo_side)
@@ -569,7 +577,6 @@ class MatchingEngine:
 
     def _put_queue_feeds(self, trades, quotes):
         self.feed_queue.put((trades, quotes))
-        return
 
     def _get_queue_feeds(self) -> Tuple[List[Trade], List[Quote]]:
         if not self.feed_queue.empty():
@@ -584,7 +591,7 @@ class MatchingEngine:
         else:
             logging.info(f"Order ID: {order.order_id} - order discarded")
 
-    
+
     def _get_queue_valid_order(self):
         return self.order_queue.get(block=True)
 
@@ -626,24 +633,28 @@ class MatchingEngine:
         Consume queue
         Read reordered orders from the queue, and handle them according to order types
         """
-        order = self._get_queue_valid_order()
-        order_type = order.type 
-        stock = order.stk_code
-        logging.info(f"Order ID: {order.order_id} - {order_type} order executing")
-        if order_type == OrderType.LIMIT_ORDER:
-            trades, quotes = self.order_books[stock].handle_order_limit(order.to_suborder())
-        elif order_type == OrderType.COUNTER_PARTY_BEST_PRICE_ORDER: 
-            trades, quotes = self.order_books[stock].handle_order_counter_side_optimal(order.to_suborder())
-        elif order_type == OrderType.OUR_BEST_PRICE_ORDER:
-            trades, quotes = self.order_books[stock].handle_order_own_side_optimal(order.to_suborder())
-        elif order_type == OrderType.TOP_FIVE_INS_TRANS_REMAIN_CANCEL_ORDER:
-            trades, quotes = self.order_books[stock].handle_order_best_five(order.to_suborder())
-        elif order_type == OrderType.IMMEDIATE_TRANS_REMAIN_CANCEL_ORDER:
-            trades, quotes = self.order_books[stock].handle_order_immediate_transact(order.to_suborder())
-        elif order_type == OrderType.FULL_DEAL_OR_CANCEL_ORDER:
-            trades, quotes = self.order_books[stock].handle_order_full_deal(order.to_suborder())
+        # self.feed_queue = feed_queue
+        # self.order_queue = order_queue
         
-        self._put_queue_feeds(trades, quotes)
+        while True:
+            order = self._get_queue_valid_order()
+            order_type = order.type 
+            stock = order.stk_code
+            logging.info(f"Order ID: {order.order_id} - {order_type} order executing")
+            if order_type == OrderType.LIMIT_ORDER:
+                trades, quotes = self.order_books[stock].handle_order_limit(order.to_suborder())
+            elif order_type == OrderType.COUNTER_PARTY_BEST_PRICE_ORDER: 
+                trades, quotes = self.order_books[stock].handle_order_counter_side_optimal(order.to_suborder())
+            elif order_type == OrderType.OUR_BEST_PRICE_ORDER:
+                trades, quotes = self.order_books[stock].handle_order_own_side_optimal(order.to_suborder())
+            elif order_type == OrderType.TOP_FIVE_INS_TRANS_REMAIN_CANCEL_ORDER:
+                trades, quotes = self.order_books[stock].handle_order_best_five(order.to_suborder())
+            elif order_type == OrderType.IMMEDIATE_TRANS_REMAIN_CANCEL_ORDER:
+                trades, quotes = self.order_books[stock].handle_order_immediate_transact(order.to_suborder())
+            elif order_type == OrderType.FULL_DEAL_OR_CANCEL_ORDER:
+                trades, quotes = self.order_books[stock].handle_order_full_deal(order.to_suborder())
+            
+            self._put_queue_feeds(trades, quotes)
 
 
     def engine_main_thread(self):

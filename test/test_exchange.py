@@ -115,12 +115,14 @@ class TestOrderLink(unittest.TestCase):
 
 		true_q = [	Quote(2, 1, 102, 30, OperationType.REMOVE_ASK),
 					Quote(2, 3, 102, 5, OperationType.REMOVE_ASK),
-					Quote(2, 44, 102, 65, OperationType.AMEND_ASK) ]
-		self.assertEqual(0, sum(list(map(quote_comp, true_q, quotes))))
-
+					Quote(2, 44, 102, -65, OperationType.AMEND_ASK) ]
 		true_t = [	Trade(2, 57, 1, 102, 30),
 					Trade(2, 57, 3, 102, 5),
 					Trade(2, 57, 44, 102, 65)	]
+
+		self.assertEqual(0, len(true_q)-len(quotes))
+		self.assertEqual(0, len(true_t)-len(trades))
+		self.assertEqual(0, sum(list(map(quote_comp, true_q, quotes))))
 		self.assertEqual(0, sum(list(map(trade_comp, true_t, trades))))
 
 		self.assertEqual(0, order_remain.volume)
@@ -136,10 +138,12 @@ class TestOrderLink(unittest.TestCase):
 		
 		true_q = [	Quote(2, 44, 102, 45, OperationType.REMOVE_ASK),
 					Quote(2, 50, 102, 2, OperationType.REMOVE_ASK) ]
-		self.assertEqual(0, sum(list(map(quote_comp, true_q, quotes))))
-
 		true_t = [	Trade(2, 60, 44, 102, 45),
 					Trade(2, 60, 50, 102, 2)	]
+
+		self.assertEqual(0, len(true_q)-len(quotes))
+		self.assertEqual(0, len(true_t)-len(trades))
+		self.assertEqual(0, sum(list(map(quote_comp, true_q, quotes))))
 		self.assertEqual(0, sum(list(map(trade_comp, true_t, trades))))
 
 		self.assertEqual(3, order_remain.volume)
@@ -148,6 +152,7 @@ class TestOrderLink(unittest.TestCase):
 		self.assertEqual(45, orderlink.link[0].volume)
 		self.assertEqual(44, orderlink.link[0].order_id)
 		self.assertEqual(2, len(orderlink.link))
+		self.assertEqual(0, len(last_link)-len(orderlink.link))
 		self.assertEqual(0, sum(list(map(miniorder_comp, last_link, orderlink.link))))
 
 
@@ -235,21 +240,21 @@ class TestOrderBook(unittest.TestCase):
 		return orderbook
 
 		'''
-		bid 	price	ask
-				130		3
-				127		5
-				126		30
-				125		10
-				124		5
-				123		30
-				122		20
-		20		120
-		10		119
-		30		118
-		5		117
-		20		115
-		5		114
-		10		111
+		id	bid 	price	ask	id
+					130		3	13
+					127		5	12
+					126		30	10
+					125		10	8
+					124		5	7
+					123		30	3
+					122		20	5
+		2	20		120
+		6	10		119
+		1	30		118
+		4	5		117
+		9	20		115
+		11	5		114
+		14	10		111
 		'''
 
 	def test_create_level(self):
@@ -319,25 +324,26 @@ class TestOrderBook(unittest.TestCase):
 		volumes = [10, 25, 20, 10]
 		orders = [ 	SubOrder(Id, DirectionType.BUY, pr, vl) 
 					for Id, pr, vl in zip(orderIds, prices, volumes) ]
-		true_q = [
-						Quote(2, 9, 118, 10, OperationType.NEW_BID),
-						Quote(2, 5, 122, 20, OperationType.REMOVE_ASK),
-						Quote(2, 10, 122, 5, OperationType.NEW_BID),
-						Quote(2, 3, 123, -20, OperationType.AMEND_ASK),
-						Quote(2, 12, 121, 10, OperationType.NEW_BID),
-		]
-		true_t = [
-						Trade(2, 10, 5, 122, 20),
-						Trade(2, 13, 3, 123, 20)
-		]
+
+		true_q = [	Quote(2, 9, 118, 10, OperationType.NEW_BID),
+					Quote(2, 5, 122, 20, OperationType.REMOVE_ASK),
+					Quote(2, 10, 122, 5, OperationType.NEW_BID),
+					Quote(2, 3, 123, -20, OperationType.AMEND_ASK),
+					Quote(2, 12, 121, 10, OperationType.NEW_BID),	]
+		true_t = [	Trade(2, 10, 5, 122, 20),
+					Trade(2, 13, 3, 123, 20)	]
+
 		trades = []
 		quotes = []
 		for order in orders:
 			this_trades, this_quotes = orderbook.handle_order_limit(order)
 			trades += this_trades
 			quotes += this_quotes
+
+		self.assertEqual(0, len(true_q)-len(quotes))
+		self.assertEqual(0, len(true_t)-len(trades))
 		self.assertEqual(0, sum(list(map(quote_comp, true_q, quotes))))
-		self.assertEqual(0, sum(list(map(quote_comp, true_t, trades))))
+		self.assertEqual(0, sum(list(map(trade_comp, true_t, trades))))
 
 		book = orderbook.get_price_depth()
 		true_book = {
@@ -359,16 +365,16 @@ class TestOrderBook(unittest.TestCase):
 		self.assertEqual(0, len(set(true_book['ask'].items()) - set(book['ask'].items())))
 
 		'''
-		bid 	price	ask
-				125		10
-				124		5
-				123		10
-		5		122 	
-		10		121		
-		20		120
-		10		119
-		40		118
-		5		117
+		id	bid 	price	ask	id
+					125		10	8
+					124		5	7
+					123		10	3
+		10	5		122 	
+		12	10		121		
+		2	20		120
+		6	10		119
+		1,9	40		118
+		4	5		117
 		'''
 
 		# test sell 
@@ -377,8 +383,33 @@ class TestOrderBook(unittest.TestCase):
 		volumes = [10, 25, 20, 10]
 		orders = [ 	SubOrder(Id, DirectionType.SELL, pr, vl) 
 					for Id, pr, vl in zip(orderIds, prices, volumes) ]
+
+		true_q = [	Quote(2, 11, 124, 10, OperationType.NEW_ASK),
+					Quote(2, 10, 122, 5, OperationType.REMOVE_BID),
+					Quote(2, 12, 121, 10, OperationType.REMOVE_BID),
+					Quote(2, 2, 120, -10, OperationType.AMEND_BID),
+					Quote(2, 2, 120, 10, OperationType.REMOVE_BID),	
+					Quote(2, 15, 120, 10, OperationType.NEW_ASK),	
+					Quote(2, 6, 119, 10, OperationType.REMOVE_BID),	
+					]
+		true_t = [	Trade(2, 10, 14, 122, 5),
+					Trade(2, 12, 14, 121, 10),	
+					Trade(2, 2, 14, 120, 10),	
+					Trade(2, 2, 15, 120, 10),	
+					Trade(2, 6, 16, 119, 10),	
+					]
+
+		trades = []
+		quotes = []
 		for order in orders:
-			orderbook.handle_order_limit(order)
+			this_trades, this_quotes = orderbook.handle_order_limit(order)
+			trades += this_trades
+			quotes += this_quotes
+			
+		self.assertEqual(0, len(true_q)-len(quotes))
+		self.assertEqual(0, len(true_t)-len(trades))
+		self.assertEqual(0, sum(list(map(quote_comp, true_q, quotes))))
+		self.assertEqual(0, sum(list(map(trade_comp, true_t, trades))))
 
 		book = orderbook.get_price_depth()
 		true_book = {
@@ -721,31 +752,55 @@ class TestOrderBook(unittest.TestCase):
 	def test_handle_fulldeal(self):
 		orderbook = self.init_book_deep()
 		'''
-		bid 	price	ask
-				130		3
-				127		5
-				126		30
-				125		10
-				124		5
-				123		30
-				122		20
-		20		120
-		10		119
-		30		118
-		5		117
-		20		115
-		5		114
-		10		111
+		id	bid 	price	ask	id
+					130		3	13
+					127		5	12
+					126		30	10
+					125		10	8
+					124		5	7
+					123		30	3
+					122		20	5
+		2	20		120
+		6	10		119
+		1	30		118
+		4	5		117
+		9	20		115
+		11	5		114
+		14	10		111
 		'''
-
 		# test buy 
 		orderIds = [9,10]
 		prices = [118, 122]
-		volumes = [30, 80]
+		volumes = [20, 80]
 		orders = [ 	SubOrder(Id, DirectionType.BUY, pr, vl) 
 					for Id, pr, vl in zip(orderIds, prices, volumes) ]
+
+		true_q = [	Quote(2, 5, 122, 20, OperationType.REMOVE_ASK),
+					Quote(2, 3, 123, 30, OperationType.REMOVE_ASK),
+					Quote(2, 7, 124, 5, OperationType.REMOVE_ASK),
+					Quote(2, 8, 125, 10, OperationType.REMOVE_ASK),
+					Quote(2, 10, 126, 30, OperationType.REMOVE_ASK),	
+					Quote(2, 12, 127, 5, OperationType.REMOVE_ASK),	
+					]
+		true_t = [	Trade(2, 9, 5, 122, 20),
+					Trade(2, 10, 3, 123, 30),	
+					Trade(2, 10, 7, 124, 5),	
+					Trade(2, 10, 8, 125, 10),	
+					Trade(2, 10, 10, 126, 30),	
+					Trade(2, 10, 12, 127, 5),	
+					]
+
+		trades = []
+		quotes = []
 		for order in orders:
-			orderbook.handle_order_full_deal(order)
+			this_trades, this_quotes = orderbook.handle_order_full_deal(order)
+			trades += this_trades
+			quotes += this_quotes
+
+		self.assertEqual(0, len(true_q)-len(quotes))
+		self.assertEqual(0, len(true_t)-len(trades))
+		self.assertEqual(0, sum(list(map(quote_comp, true_q, quotes))))
+		self.assertEqual(0, sum(list(map(trade_comp, true_t, trades))))
 
 		book = orderbook.get_price_depth()
 		true_book = {
@@ -753,7 +808,7 @@ class TestOrderBook(unittest.TestCase):
 						120: 20, 119: 10, 118: 30, 117: 5, 115: 20, 114: 5, 111: 10
 					},
 				'ask':{
-						130: 3, 127: 5, 126: 30, 125: 10, 124: 5, 123: 20
+						130: 3,
 					}
 				}
 		self.assertEqual(0, len(set(true_book['bid'].items()) - set(book['bid'].items())))
@@ -765,8 +820,33 @@ class TestOrderBook(unittest.TestCase):
 		volumes = [70, 5, 30]
 		orders = [ 	SubOrder(Id, DirectionType.SELL, pr, vl) 
 					for Id, pr, vl in zip(orderIds, prices, volumes) ]
+					
+		true_q = [	Quote(2, 2, 120, 20, OperationType.REMOVE_BID),
+					Quote(2, 6, 119, 10, OperationType.REMOVE_BID),
+					Quote(2, 1, 118, 30, OperationType.REMOVE_BID),
+					Quote(2, 4, 117, 5, OperationType.REMOVE_BID),
+					Quote(2, 9, 115, -5, OperationType.AMEND_BID),	
+					Quote(2, 9, 115, -5, OperationType.AMEND_BID),	
+					]
+		true_t = [	Trade(2, 2, 11, 120, 20),
+					Trade(2, 6, 11, 119, 10),	
+					Trade(2, 1, 11, 118, 30),	
+					Trade(2, 4, 11, 117, 5),	
+					Trade(2, 9, 11, 115, 5),	
+					Trade(2, 9, 12, 115, 5),	
+					]
+
+		trades = []
+		quotes = []
 		for order in orders:
-			orderbook.handle_order_full_deal(order)
+			this_trades, this_quotes = orderbook.handle_order_full_deal(order)
+			trades += this_trades
+			quotes += this_quotes
+
+		self.assertEqual(0, len(true_q)-len(quotes))
+		self.assertEqual(0, len(true_t)-len(trades))
+		self.assertEqual(0, sum(list(map(quote_comp, true_q, quotes))))
+		self.assertEqual(0, sum(list(map(trade_comp, true_t, trades))))
 
 		book = orderbook.get_price_depth()
 		true_book = {
@@ -774,7 +854,7 @@ class TestOrderBook(unittest.TestCase):
 						115: 10, 114: 5, 111: 10
 					},
 				'ask':{
-						130: 3, 127: 5, 126: 30, 125: 10, 124: 5, 123: 20
+						130: 3, 
 					}
 				}
 		self.assertEqual(0, len(set(true_book['bid'].items()) - set(book['bid'].items())))

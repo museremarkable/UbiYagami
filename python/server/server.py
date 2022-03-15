@@ -537,13 +537,14 @@ class MatchingEngine:
         return upper, lower
 
     def _recv_order(self) -> Order:
-        return self.connect.recv()
+        return self.connect.recv_order()
 
     def _send_feed(self, trades: List[Trade], quotes: List[Quote]):
         for x in trades:
-            self.connect.send({'trade':x})
-        for x in quotes:
-            self.connect.send({'quote': x})
+            # self.connect.send({'trade':x})
+            self.connect.send_feed(x)
+        # for x in quotes:
+        #     self.connect.send({'quote': x})
 
 
     def _check_order(self, order: Order):

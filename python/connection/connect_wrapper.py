@@ -133,7 +133,7 @@ class ConnectClient():
 				message = self._recv_message()
 				if message is not None:
 					message = json.loads(message)
-					ack = message.get['A']
+					ack = message.get('A')
 					feed = message.get('F')
 					if ack is not None:
 						self.ack_queue.put(ack)

@@ -87,7 +87,7 @@ class ClientTCP:
         asyncio.create_task(self.listen_for_messages('127.0.0.1', reader))
 
 
-if __name__ == '__main__':
+def
     order_queue = Queue()
     response_queue = Queue()
     count = 100

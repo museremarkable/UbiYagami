@@ -8,10 +8,10 @@ import socket
 class ClientTCP:
     def __init__(self, order_queue, response_queue):
         #todo: queue让外面传进来
-        self.ip_address = ["127.0.0.1"]
+        self.ip_address = ["10.216.68.191", '10.216.68.192']
         self.alive = {}
         self.exchange2writer = {}
-        self.binding_port = 8000
+        self.binding_port = 12345
         "0 is normal, differnet number corresponding different stastus"
         self.ports_status = [0, 0, 0]
         self.log = get_logger(__name__, filename='streaming_client')

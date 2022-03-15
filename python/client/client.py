@@ -22,10 +22,9 @@ import time
 from utils.wirte_logger import get_logger
 import asyncio
 from asyncio import AbstractEventLoop, StreamReader, StreamWriter
-from argparse import ArgumentParser
-import numpy as np
 
-from python.data_type import OrderType, DirectionType, OperationType, Order, Quote, Trade
+import numpy as np
+from data_type import OrderType, DirectionType, OperationType, Order, Quote, Trade
 import logging
 logger = logging.getLogger()
 handler = logging.FileHandler('./ClientLogFile.log')
@@ -268,7 +267,7 @@ class Client:
                 price = self.all_page[stock_id][i][2]
                 volume = self.all_page[stock_id][i][3]
                 type = OrderType(self.all_page[stock_id][i][4])
-                tempdata = Order(stock_id, i, direction, price, volume, type)
+                tempdata = Order(stock_id, int(self.all_page[stock_id][i][0]), direction, price, volume, type)
                     #here need to add some to avoid 
                     #if corresponding trade_list number is 
                 if i % 20 == 1:
@@ -283,7 +282,7 @@ class Client:
             else:
                 direction = DirectionType(self.all_page[stock_id][i][1])
                 type = OrderType(self.all_page[stock_id][i][4])
-                tempdata = Order(stock_id, i, direction, 0, 0, type)
+                tempdata = Order(stock_id, int(self.all_page[stock_id][i][0]), direction, 0, 0, type)
                 await send_queue.put(tempdata)
                 logger.debug("put no nned to use order_id %d of stock %d in send_queue" % (self.all_page[stock_id][i][0], stock_id))
                 #!!!!! only for test
@@ -366,17 +365,7 @@ class Client:
         with open(res_file_path, 'wb') as f:
             f.write(b''.join(map(lambda x: x.to_bytes(), self.trade_list[stock_id])))
 
-parser = ArgumentParser()
-parser.add_argument("-f", "--filepath",  help="data file folder path")
-parser.add_argument("-r", "--respath",  help="result folder path")
-parser.add_argument("-c", "--client_id",  help="client_id, which is 1 or 2")
-args = parser.parse_args()
 
-Trader_Server = Client(args.client_id, args.filepath, args.respath)
-logger.info("===============begin to read data==============")
-Trader_Server.data_read()
-logger.info("===============data read finished==============")
-logger.info("==========================client server %s begin===========================" % args.client_id)
 asyncio.run(Trader_Server.communicate_with_server())
 #todo暂时把接受数据与写文件解耦，后续tcp部分完成后和tcp部分写到一起
 for i in range(10):

@@ -1,16 +1,16 @@
 import enum
 import struct
+import json
 
 
-class DirectionType(enum.Enum):
+class DirectionType(enum.IntEnum):
     """
     the trading direction of the order: buy side / sell side;
     """
     BUY = 1
     SELL = -1
 
-
-class OrderType(enum.Enum):
+class OrderType(enum.IntEnum):
     """
     Totally 6 types of order;
     """
@@ -45,9 +45,17 @@ class Order:
         convert into MinOrder type;
         """
         return MinOrder(self.order_id, self.volume)
-    
 
-
+    def to_dict(self):
+        return {
+                'o': int(self.order_id),
+                's': int(self.stk_code),
+                'd': int(self.direction),
+                't': int(self.type),
+                'p': self.price,
+                'v': int(self.volume)
+            }
+        
 
 class SubOrder:
     """
@@ -87,8 +95,17 @@ class Quote:
         self.volume = volume
         self.operation = operation
 
+    def to_dict(self):
+        return {
+            's': self.stk_code,
+            'o': self.order_id,
+            'p': self.price,
+            'v': self.volume,
+            'O': self.operation
+        }
 
-class OperationType(enum.Enum):
+
+class OperationType(enum.IntEnum):
     """
     A type used as update instructions to reconstruct the local order book;
     """
@@ -113,3 +130,12 @@ class Trade:
 
     def to_bytes(self):
         return struct.pack("=iiidi", self.stk_code, self.bid_id, self.ask_id, self.price, self.volume)
+
+    def to_dict(self):
+        return {
+            's': self.stk_code,
+            'b': self.bid_id,
+            'a': self.ask_id,
+            'p': self.price,
+            'v': self.volume
+        }

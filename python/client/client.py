@@ -21,9 +21,11 @@ import pandas as pd
 import time
 from utils.wirte_logger import get_logger
 import asyncio
+from asyncio import AbstractEventLoop, StreamReader, StreamWriter
 from argparse import ArgumentParser
 import numpy as np
-from data_type import OrderType, DirectionType, OperationType, Order, Quote, Trade
+
+from python.data_type import OrderType, DirectionType, OperationType, Order, Quote, Trade
 import logging
 logger = logging.getLogger()
 handler = logging.FileHandler('./ClientLogFile.log')
@@ -37,6 +39,11 @@ handler.setFormatter(formatter)
 # logger.error('This is a sample error message')
 # logger.critical('This is a sample critical message')
 # logger.error('Our First Log Message')
+
+
+
+
+
 #from python.server.server import BuySide, OrderType
 #from server.server import Order
 
@@ -68,25 +75,18 @@ class OrderStreamClient:
     BUF_SIZE = 2 << 20
     #order_tick_shema = OrderTick()
     # todo:完善
+    # todo： 做好解析之后还回去。
 
-    def __init__(self, ip:str, port:int):
+    def __init__(self, ip: str, port: int):
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.settimeout(3)
         self._socket.connect((ip, port))
         self.data_queue = PollableQueue()
         self._is_running = True
         # todo: write a function to read data file
-        self._load_symbol_map()
         self.log = get_logger(__name__, filename='streaming_client')
         # write a log ?
         # self.log
-
-
-    def _load_symbol_map(self):
-        # todo:  看看这里应该怎么写
-        # path = pathlib.Path(__file__)
-        path = os.getcwd()
-        pass
 
     def close(self):
         self._is_running = False
@@ -98,7 +98,7 @@ class OrderStreamClient:
                 data = incomplete_frame + self._socket.recv(self.BUF_SIZE)
             except socket.timeout:
                 if is_in_trading_day_session_trading_hour():
-                    self.msg_bot.msg2fs('Sending Heart Beat...Plz Check Streaming Data Availability!')
+                    self.log.debug('Sending Heart Beat...Plz Check Streaming Data Availability!')
                 self.heartbeat()
                 continue
             except BaseException as e:
@@ -226,6 +226,7 @@ class Client:
     async def communicate_with_server(self):
         """
         communicate all data with server
+        why use async not multiprocess
         """
         send_queue = asyncio.Queue(100)
         reveive_queue = asyncio.Queue(100)
@@ -289,7 +290,7 @@ class Client:
                 #await send_queue.get()
                 #await asyncio.sleep(1)
             #only trans order_id and stock_id, other parameter is 0
-            #to do 
+
    
 
 
@@ -299,6 +300,7 @@ class Client:
         """
         if order_id < self.hook_mtx[stock_id][self.hook_position[stock_id]][0]:
             # if this order id is smaller than the first hook orderid, definetely need to send
+
             return True
         elif order_id == self.hook_mtx[stock_id][self.hook_position[stock_id]][0]:
             # if this order id is in hook matrix, begin to see if volume is smaller than arg

@@ -575,6 +575,10 @@ class MatchingEngine:
         self.next_order_id[stock] = 1
         self.order_cache[stock] = {}        # price -> Order
 
+    def _store_trades(self, trades: List[Trade]):
+        for t in trades:
+            t.to_bytes()  #TODO
+
     def _put_queue_feeds(self, trades, quotes):
         self.feed_queue.put((trades, quotes))
 
@@ -596,13 +600,14 @@ class MatchingEngine:
         return self.order_queue.get(block=True)
 
 
-    def update_order_queue_thread(self, order_queue: Queue, feed_queue: Queue):
+    def update_order_queue_thread(self): #, order_queue: Queue, feed_queue: Queue):
         """
         Feed queue
         When a new order arrived, update the current order_id and put it into the queue if valid
         """
-        self.feed_queue = feed_queue
-        self.order_queue = order_queue
+        # self.feed_queue = feed_queue
+        # self.order_queue = order_queue
+
         while True:
             order = self._recv_order()
             if self.order_books.get(order.stk_code) is None:
@@ -624,8 +629,6 @@ class MatchingEngine:
                     self._send_feed({'trade':trades[i], 'quote':quotes[i]})
                 for q in quotes[minlen:]:
                     self._send_feed({'quote':q})
-
-
 
 
     def handle_order_all_stocks_thread(self):
@@ -661,7 +664,20 @@ class MatchingEngine:
         """
         start up threads here
         """
-        pass
+        process_list = []
+        for i in range(1):
+            p = Process(target=self.handle_order_all_stocks_thread, args=())
+            process_list.append(p)
+
+        for p in process_list:
+            p.start()
+
+        p = Process(target=self.update_order_queue_thread, args=())
+        process_list.append(p)
+
+        for p in process_list:
+            p.join()
+
 
 
 

@@ -8,6 +8,7 @@ from multiprocessing import Process, Queue
 from python.server.data_type import DirectionType, Order, OrderType, Trade, Quote
 
 from python.server.server import MatchingEngine
+from python.server.order_reader import DataReader
 
 def order_comp(o1: Order, o2: Order):
 	comp = [o1.stk_code != o2.stk_code,
@@ -117,10 +118,6 @@ class TestOrderLink(unittest.TestCase):
         orders = [ 	list_to_order(s[0], s[1:] ) 
                     for s in zip(stk, orderIds, direction, prices, volumes, orderType) ]
         
-        # true_q = [
-        #             Quote(2, 1, 107.74)
-        # ]
-
         self.engine._recv_order = mock.Mock(side_effect=orders)
 
         order_q = Queue()
@@ -153,3 +150,37 @@ class TestOrderLink(unittest.TestCase):
             # res = order_comp()
             # self.assertEqual(0, res)
             i += 1
+
+    def test_dataset(self):
+        trader1 = DataReader(1, data_file_path=r"C:\Users\Leons\git\UbiYagami\data_test\100x10x10", res_file_path="")
+        trader2 = DataReader(2, data_file_path=r"C:\Users\Leons\git\UbiYagami\data_test\100x10x10", res_file_path="")
+        trader1.data_read()
+        trader2.data_read()
+
+        stk1_1 = trader1.all_page[1]
+        stk1_2 = trader2.all_page[1]
+
+        orders = []
+        for x,y in zip(stk1_1, stk1_2):
+            orders += [list_to_order(2,x), list_to_order(2,y)]
+
+        self.engine._recv_order = mock.Mock(side_effect=orders)
+
+        feed_q = Queue()
+        self.engine.feed_queue = mock.Mock(return_value=feed_q)()
+
+        try:
+            self.engine.engine_main_thread()
+        except StopIteration:
+            print('iteration stopped')
+        
+        i = 0
+        self.assertEqual(False, feed_q.empty())
+        while not feed_q.empty():
+            trades, quotes = feed_q.get()
+            # res = order_comp()
+            # self.assertEqual(0, res)
+            i += 1
+
+
+

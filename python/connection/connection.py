@@ -16,13 +16,16 @@ class Operation(IntEnum):
 
 
 class ServerTCP:
-    def __init__(self,order_queue, response_queue):
+    def __init__(self, order_queue, response_queue, host: str, port: int):
         self.trader2writer = {}
-        self.binding_ports = [100, 101, 102]
-        self.ports_status = [0, 0, 0]
+        self.host = host
+        self.port = port
+        # self.binding_ports = [100, 101, 102]
+        # self.ports_status = [0, 0, 0]
         self.order_queue = order_queue
         self.response_queue = response_queue
         self.log = get_logger(__name__, filename='streaming_server')
+        self.server_connection(self.host, self.port)
 
     async def server_connection(self, host: str, port: int):
         "receive order from client , send result to two client"
@@ -179,19 +182,22 @@ class ServerTCP:
                 [await self._del_trade(username) for username in inactive_trade]
 
 
-async def main():
-    order_queue = Queue()
-    response_queue = Queue()
-    count = 0
-    while count <= 50:
-        count += 1
-        order_queue.put(str(count)+'\n')
-        response_queue.put(str(count)+'\n')
-    server = ServerTCP(order_queue, response_queue)
+async def run_server(order_queue, response_queue):
+    # order_queue = Queue()
+    # response_queue = Queue()
+    # count = 0
+    # while count <= 50:
+    #     count += 1
+    #     order_queue.put(str(count)+'\n')
+    #     response_queue.put(str(count)+'\n')
+    host = '106.15.11.226'
+    port = 12345
+    server = ServerTCP(order_queue, response_queue, host, port)
     await server.server_connection('127.0.0.1', 8000)
 
 
-asyncio.run(main())
+def server(order_queue, response_queue):
+    asyncio.run(run_server(order_queue, response_queue))
 
 
 

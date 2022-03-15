@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 from python.server import MatchingEngine
 import unittest
+from client.client import Client
 
 """
 unit test

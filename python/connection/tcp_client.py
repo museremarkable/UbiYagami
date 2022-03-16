@@ -3,6 +3,7 @@ sys.path.append("")
 import asyncio
 from asyncio import StreamWriter, StreamReader
 from utils.wirte_logger import get_logger
+from utils.data_trans import convert_msg2obj, convert_obj2msg
 from queue import Queue
 import json
 import socket
@@ -25,19 +26,21 @@ class ClientTCP:
         '''send info to server'''
         message = self.response_queue.get()
         if type(message)!=bytes and type(message)!=str:
-            message = json.dumps(message.__dict__).encode()
+            message = convert_obj2msg(message)
+            #json.dumps(message.__dict__).encode()
         while message!=b'' and message!='':
-            if type(message)!=bytes:
+            if type(message) != bytes:
                 message = message.encode()
             if not message.endswith(b'\n'):
-                message = message+ b'\n'
-            writer.write(message)
-            await writer.drain()
-            self.log.info(f'Send message {message}')
+                message = message + b'\n'
+            await self._notify_all(message)
+            # writer.write(message)
+            # await writer.drain()
+
             message = self.response_queue.get()
             if type(message)!=bytes and type(message)!=str:
-                message = json.dumps(message.__dict__).encode()
-            await asyncio.sleep(2)
+                message = convert_obj2msg(message)
+            await asyncio.sleep(1)
         self.log.info('While statement is skipped')
         # del self.alive[host]
         # writer.close()
@@ -47,7 +50,8 @@ class ClientTCP:
         while True:
             data = await asyncio.wait_for(reader.readline(), 60)
             if data != b'\n' and data != b'':
-                print('Recieved {}'.format(data))
+                self.log.info('Recieved {}'.format(data))
+                data = convert_msg2obj(data)
                 self.response_queue.put(data)
                 await asyncio.sleep(1)
             else:
@@ -59,17 +63,35 @@ class ClientTCP:
     async def client_connection(self, host, port):
         self.log.info('Connection begin')
         reader, writer = await asyncio.open_connection(host, port)
-        self.alive[host] = True
-        writer.write(f'CONNECT {port}\n'.encode())
+        self.exchange2writer[host] = writer
+        writer.write(f'CONNECT-{port}\n'.encode())
         await writer.drain()
         asyncio.create_task(self.send_message(host, writer))
         asyncio.create_task(self.listen_for_messages(host, reader))
 
         # return reader, writer
 
+    async def _notify_all(self, msg):
+        # todo: response queue
+        # 广播
+        inactive_trade = []
+        for addr, writer in self.exchange2writer.items():
+            try:
+                if type(msg) == bytes:
+                    writer.write(msg)
+                else:
+                    writer.write(msg.encode())
+                await writer.drain()
+                await asyncio.sleep(1)
+            except ConnectionError as e:
+                self.log.exception('Could not write to client.', exc_info=e)
+                inactive_trade.append(addr)
+                [await self._del_trade(username) for username in inactive_trade]
+        self.log.info('Send message {}'.format(msg))
+
     async def reconnection(self, host, port):
         while True:
-            if host not in self.alive.keys():
+            if host not in self.exchange2writer.keys():
                 try:
                     await self.client_connection(host, port)
                     self.log.info('Connecting to server {}:{}'.format(host, port))

@@ -101,14 +101,17 @@ class ServerTCP:
         self.log.info('Write Stream begin')
         while True:
             try:
-                data = self.response_queue.get()
-                if type(data) != bytes and type(data) != str:
-                    data = convert_obj2msg(data)
-                if not data.endswith(b'\n'):
+                if self.response_queue.empty():
+                    self.log.info('Response_queue is empty')
+                    await asyncio.sleep(0.1)
+                else:
+                    data = self.response_queue.get()
+                    #data = b'test without queue get'
+                    if type(data) != bytes and type(data) != str:
+                        data = convert_obj2msg(data)
                     data = data + b'\n'
-                if data != b'\n' and data != b'':
-                    await self._notify_all(data)
-                await asyncio.sleep(2)
+                    if data != b'\n' and data != b'':
+                        await self._notify_all(data)
                 #     writer.write(data.encode()+b'\n')
                 #     print('Send {}'.format(data))
                 # await writer.drain()
@@ -124,7 +127,7 @@ class ServerTCP:
             if data.startswith(b'CONNECT'):
                 self.log.info('Confirm connect')
             else:
-                self.log.info('receive data')
+                self.log.info('receive data{}'.format(data))
                 data = convert_msg2obj(data)
                 self.trans_stream2exchange(data)
         # try:
@@ -208,7 +211,6 @@ class ServerTCP:
         # todo: response queue
         # 广播
         inactive_trade = []
-        self.log.info('Test notity')
         for addr, writer in self.trader2writer.items():
             try:
                 if type(msg) == bytes:
@@ -221,6 +223,7 @@ class ServerTCP:
                 self.log.exception('Could not write to client.', exc_info=e)
                 inactive_trade.append(addr)
                 [await self._del_trade(username) for username in inactive_trade]
+        self.log.info('Send message {}'.format(msg))
 
 
 async def run_server(order_queue, response_queue):

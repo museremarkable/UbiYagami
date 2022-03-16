@@ -29,7 +29,7 @@ class ClientTCP:
             message = convert_obj2msg(message)
             #json.dumps(message.__dict__).encode()
         while message!=b'' and message!='':
-            if type(message)!=bytes:
+            if type(message) != bytes:
                 message = message.encode()
             if not message.endswith(b'\n'):
                 message = message + b'\n'

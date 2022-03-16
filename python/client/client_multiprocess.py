@@ -1,6 +1,5 @@
 import os
 import sys
-from cv2 import trace
 path = os.path.join(os.path.dirname(__file__), os.pardir)
 sys.path.append(path)
 #from client.client import Client
@@ -97,11 +96,14 @@ class data_read:
             # sort curr_order_page by order_id
             curr_order_page = curr_order_page[curr_order_page[:, 0].argsort()] 
             self.all_page.append(curr_order_page)
-            temp_file_path = self.data_file_path + '/' + 'temp' + str(curr_stock_id + 1)
-            res = curr_order_page.tolist()
-            print(len(res[0]))
+            #temp_file_path = self.data_file_path + '/team-3/' + 'temp' + str(curr_stock_id + 1)
+            temp_file_path = '/data/team-3/' + 'temp' + str(curr_stock_id + 1)
+
+            #res = curr_order_page.tolist()
+            #print(len(res[0]))
+
             with open(temp_file_path, 'wb') as f:
-                f.write(b''.join(map(lambda x: struct.pack("=iiidii", int(curr_stock_id), int(x[0]), int(x[1]), x[2], int(x[3]), int(x[4])), res)))
+                f.write(b''.join(map(lambda x: struct.pack("=iiidii", int(curr_stock_id), int(x[0]), int(x[1]), x[2], int(x[3]), int(x[4])),curr_order_page)))
 
 async def order_is_need_to_tans(order_id, stock_id, hook_mtx, hook_position, trade_list):
     """
@@ -156,7 +158,10 @@ async def order_is_need_to_tans(order_id, stock_id, hook_mtx, hook_position, tra
             return True               
 
 async def communicate_single_stock_with_server(i, data_file_path, send_queue, hook_mtx, hook_position, trade_lists):
-    temp_file_path = data_file_path + '/' + 'temp' + str(i + 1)
+
+    temp_file_path = '/data/team-3/' + 'temp' + str(i + 1)
+    #temp_file_path = data_file_path + '/' + 'temp' + str(i + 1)
+
     order_list = read_binary_order_temp_file(temp_file_path)
     logger.info("start put orderid of stock %d in queue" % (i + 1))
         
@@ -171,10 +176,15 @@ async def communicate_single_stock_with_server(i, data_file_path, send_queue, ho
                 # a stock hook 1000 6 230 5
                 await asyncio.sleep(1)
                 send_queue.put(order_list[index])
-                logger.debug("put order_id %d of stock %d in send_queue" % (order_id, i + 1))
+                
+                logger.debug("put order_id %d of stock %d in send_queue(index is %d)" % (order_id, i + 1, index))
                 #!!!!! only for test
                 #await send_queue.get()
                 #await asyncio.sleep(1)
+            else:
+                
+                send_queue.put(order_list[index])
+                logger.debug("put order_id %d of stock %d in send_queue(index is %d)" % (order_id, i + 1, index))
             
         else:
             tempdata = Order(i, order_id, direction, 0, 0, type)
@@ -233,7 +243,9 @@ def communicate_with_server(send_queue, receive_queue, client_id, data_file_path
     """
     function to square a given list
     """
-    run_client(send_queue, receive_queue)
+
+    run_client(receive_queue,send_queue)
+
 
 def write_result_to_file(receive_queue, res_file_path, client_id, trade_lists):
     """
@@ -247,7 +259,10 @@ def write_result_to_file(receive_queue, res_file_path, client_id, trade_lists):
         else:
             stock_id = Trade_Item.stk_code
             volume = Trade_Item.volume
-            trade_lists[stock_id - 1].append(volume)
+            row = trade_lists[stock_id - 1] # take the  row
+            row.append(volume) # change it
+            trade_lists[stock_id - 1] = row
+            #trade_lists[stock_id - 1].append(volume)
             res_path = res_file_path + '/' + 'trade' + str(stock_id)
             with open(res_path, 'wb') as f:
                 f.write(b''.join(Trade_Item.to_bytes()))
@@ -304,16 +319,23 @@ if __name__ == "__main__":
     send_queue = multiprocessing.Queue()
     receive_queue = multiprocessing.Queue()
     # creating new processes
+    process_list = []
     process_read_data_from_file = multiprocessing.Process(target=read_data_from_file, args=(args.filepath, int(args.client_id), ))
     process_put_data_in_queue = multiprocessing.Process(target=put_data_in_queue, args=(send_queue, args.filepath, int(args.client_id), trade_lists))
     process_communicate_with_server = multiprocessing.Process(target=communicate_with_server, args=(send_queue,receive_queue,int(args.client_id), args.filepath,trade_lists))
     process_write_result_to_file = multiprocessing.Process(target=write_result_to_file, args=(receive_queue,args.respath, int(args.client_id),trade_lists))
     
     process_read_data_from_file.start()
-    process_read_data_from_file.join()
+    #process_read_data_from_file.join()
     process_put_data_in_queue.start()
-    process_put_data_in_queue.join()
+    #process_put_data_in_queue.join()
     process_communicate_with_server.start()
-    process_communicate_with_server.join()
+    #process_communicate_with_server.join()
     process_write_result_to_file.start()
-    process_write_result_to_file.join()
+    #process_write_result_to_file.join()
+    process_list.append(process_read_data_from_file)
+    process_list.append(process_put_data_in_queue)
+    process_list.append(process_communicate_with_server)
+    process_list.append(process_write_result_to_file)
+    for p in process_list:
+        p.join()

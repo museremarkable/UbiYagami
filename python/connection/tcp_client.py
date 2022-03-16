@@ -1,6 +1,8 @@
+import sys 
+sys.path.append("")
 import asyncio
 from asyncio import StreamWriter, StreamReader
-from wirte_logger import get_logger
+from utils.wirte_logger import get_logger
 from queue import Queue
 import json
 import socket
@@ -8,10 +10,10 @@ import socket
 class ClientTCP:
     def __init__(self, order_queue, response_queue):
         #todo: queue让外面传进来
-        self.ip_address = ["127.0.0.1"]
+        self.ip_address = ["10.216.68.191", '10.216.68.192']
         self.alive = {}
         self.exchange2writer = {}
-        self.binding_port = 8000
+        self.binding_port = 12345
         "0 is normal, differnet number corresponding different stastus"
         self.ports_status = [0, 0, 0]
         self.log = get_logger(__name__, filename='streaming_client')
@@ -22,21 +24,31 @@ class ClientTCP:
     async def send_message(self, host, writer: StreamWriter):
         '''send info to server'''
         message = self.response_queue.get()
-        print('Send {}'.format(message))
-        while message:
-            writer.write((str(message).encode()) + b'\n')
+        if type(message)!=bytes and type(message)!=str:
+            message = json.dumps(message.__dict__).encode()
+        while message!=b'' and message!='':
+            if type(message)!=bytes:
+                message = message.encode()
+            if not message.endswith(b'\n'):
+                message = message+ b'\n'
+            writer.write(message)
             await writer.drain()
+            self.log.info(f'Send message {message}')
             message = self.response_queue.get()
+            if type(message)!=bytes and type(message)!=str:
+                message = json.dumps(message.__dict__).encode()
             await asyncio.sleep(2)
+        self.log.info('While statement is skipped')
         # del self.alive[host]
         # writer.close()
 
     async def listen_for_messages(self, host, reader: StreamReader):
+        self.log.info('listern stream begin')
         while True:
             data = await asyncio.wait_for(reader.readline(), 60)
             if data != b'\n' and data != b'':
                 print('Recieved {}'.format(data))
-                self.response_queue.put(data+b'res')
+                self.response_queue.put(data)
                 await asyncio.sleep(1)
             else:
                 # del self.alive[host]
@@ -45,7 +57,7 @@ class ClientTCP:
         print('Server closed connection.')
 
     async def client_connection(self, host, port):
-        print('prepare connection')
+        self.log.info('Connection begin')
         reader, writer = await asyncio.open_connection(host, port)
         self.alive[host] = True
         writer.write(f'CONNECT {port}\n'.encode())
@@ -57,11 +69,10 @@ class ClientTCP:
 
     async def reconnection(self, host, port):
         while True:
-
             if host not in self.alive.keys():
-                self.log.info('Connecting to server {}:{}'.format(host, port))
                 try:
                     await self.client_connection(host, port)
+                    self.log.info('Connecting to server {}:{}'.format(host, port))
                 except ConnectionRefusedError:
                     self.log.error('Connection to server {}:{} failed!'.format(host, port))
                 except asyncio.TimeoutError:
@@ -76,15 +87,15 @@ class ClientTCP:
         coros = [self.reconnection(host, self.binding_port) for host in self.ip_address]
         await asyncio.gather(*coros)
 
-    async def run_without_retry(self):
-        #await self.client_connection('127.0.0.1', 8000)
-        reader, writer = await asyncio.open_connection('127.0.0.1', 8000)
-        # # self.alive[host] = True
-        writer.write(f'CONNECT {8000}\n'.encode())
-        await writer.drain()
+    # async def run_without_retry(self):
+    #     #await self.client_connection('127.0.0.1', 8000)
+    #     reader, writer = await asyncio.open_connection('127.0.0.1', 8000)
+    #     # # self.alive[host] = True
+    #     writer.write(f'CONNECT {8000}\n'.encode())
+    #     await writer.drain()
 
-        asyncio.create_task(self.send_message('127.0.0.1', writer))
-        asyncio.create_task(self.listen_for_messages('127.0.0.1', reader))
+    #     asyncio.create_task(self.send_message('127.0.0.1', writer))
+    #     asyncio.create_task(self.listen_for_messages('127.0.0.1', reader))
 
 
 def run_client(order_queue, response_queue):

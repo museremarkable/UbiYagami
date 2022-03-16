@@ -1,11 +1,15 @@
+<<<<<<< HEAD
 import sys
 sys.path.append("..")
 sys.path.append("../utils")
-from connection.connection import server
+# from connection.connection import server
+from simple_server_test import server
 from server import MatchingEngine
 from multiprocessing import Queue, Process
 from connection.connect_wrapper import connect
-# import os
+# from connection.connection import ServerTCP
+from connection.connect_wrapper import connect
+
 # path = os.path.join(os.path.dirname(__file__), os.pardir)
 # sys.path.append(path)
 

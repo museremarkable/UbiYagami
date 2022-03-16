@@ -2,6 +2,7 @@ import os
 import sys
 path = os.path.join(os.path.dirname(__file__), os.pardir)
 sys.path.append(path)
+sys.path.append('python')
 #from client.client import Client
 import h5py
 import asyncio
@@ -31,7 +32,7 @@ def read_binary_order_temp_file(data_file_path):
             data = f.read(struct_len)
             if not data: break
             s = struct_unpack(data)
-            results.append(Order(s[0], s[1], s[2], s[3], s[4], s[5]))
+            results.append(Order(s[0]+1, s[1], DirectionType(s[2]), s[3], s[4], OrderType(s[5])))
     return results
 
 class data_read:
@@ -96,8 +97,8 @@ class data_read:
             # sort curr_order_page by order_id
             curr_order_page = curr_order_page[curr_order_page[:, 0].argsort()] 
             self.all_page.append(curr_order_page)
-            #temp_file_path = self.data_file_path + '/team-3/' + 'temp' + str(curr_stock_id + 1)
-            temp_file_path = '/data/team-3/' + 'temp' + str(curr_stock_id + 1)
+            temp_file_path = self.data_file_path + '/team-3/' + 'temp' + str(curr_stock_id + 1)
+            # temp_file_path = '/data/team-3/' + 'temp' + str(curr_stock_id + 1)
 
             #res = curr_order_page.tolist()
             #print(len(res[0]))
@@ -159,8 +160,8 @@ async def order_is_need_to_tans(order_id, stock_id, hook_mtx, hook_position, tra
 
 async def communicate_single_stock_with_server(i, data_file_path, send_queue, hook_mtx, hook_position, trade_lists):
 
-    temp_file_path = '/data/team-3/' + 'temp' + str(i + 1)
-    #temp_file_path = data_file_path + '/' + 'temp' + str(i + 1)
+    # temp_file_path = '/data/team-3/' + 'temp' + str(i + 1)
+    temp_file_path = data_file_path + '/team-3/' + 'temp' + str(i + 1)
 
     order_list = read_binary_order_temp_file(temp_file_path)
     logger.info("start put orderid of stock %d in queue" % (i + 1))
@@ -220,7 +221,7 @@ async def put_in_queue(data_file_path, send_queue, hook_mtx, hook_position, trad
 #####################################################################################################################
 
 def read_data_from_file(data_file_path, client_id):
-    #Trader_Server = Client(args.client_id, args.filepath, args.respath)
+    #Trader_Server = Client(client_id, filepath, respath)
     logger.info("READ DATA PROCESS: READ PATH %s CLIENT_ID %d " % (data_file_path, client_id))
     order_data = data_read(data_file_path, client_id)
     order_data.data_read()
@@ -272,70 +273,44 @@ def write_result_to_file(receive_queue, res_file_path, client_id, trade_lists):
         with open(res_path, 'wb') as f:
             f.write(b''.join(map(lambda x: x.to_bytes(), trade_lists[stock_id])))
     '''  
-if __name__ == "__main__":
+def trader(client_id, filepath, respath, send_queue, receive_queue):
     # input list
-    parser = ArgumentParser()
-    parser.add_argument("-f", "--filepath",  help="data file folder path")
-    parser.add_argument("-r", "--respath",  help="result folder path")
-    parser.add_argument("-c", "--client_id",  help="client_id, which is 1 or 2")
-    args = parser.parse_args()    
+    # parser = ArgumentParser()
+    # parser.add_argument("-f", "--filepath",  help="data file folder path")
+    # parser.add_argument("-r", "--respath",  help="result folder path")
+    # parser.add_argument("-c", "--client_id",  help="client_id, which is 1 or 2")
+    # args = parser.parse_args()    
     logger.info("===============begin to read data==============")
     
-
     manager = multiprocessing.Manager()
     # a simple implemment to achieve result
     trade_lists = manager.list()
     for i in range(10):
         trade_lists.append([])
-    '''EXAMPLE
-    from multiprocessing import Process, Manager
-
-    def f(L):
-        row = L[0] # take the 1st row
-        row.append(10) # change it
-
-        L[0] = row #NOTE: important: copy the row back (otherwise parent
-                #process won't see the changes)
-
-    if __name__ == '__main__':
-        manager = Manager()
-
-        lst = manager.list()
-        lst.append([1])
-        lst.append([2, 3])
-        print(lst) # before: [[1], [2, 3]]
-
-        p = Process(target=f, args=(lst,))
-        p.start()
-        p.join()
-
-        print(lst) # after: [[1, 10], [2, 3]]
-    '''
 
     logger.info("===============data read finished==============")
-    logger.info("==========================client server %s begin===========================" % args.client_id)
+    logger.info("==========================client server %s begin===========================" % client_id)
   
     # creating multiprocessing Queue
-    send_queue = multiprocessing.Queue()
-    receive_queue = multiprocessing.Queue()
     # creating new processes
     process_list = []
-    process_read_data_from_file = multiprocessing.Process(target=read_data_from_file, args=(args.filepath, int(args.client_id), ))
-    process_put_data_in_queue = multiprocessing.Process(target=put_data_in_queue, args=(send_queue, args.filepath, int(args.client_id), trade_lists))
-    process_communicate_with_server = multiprocessing.Process(target=communicate_with_server, args=(send_queue,receive_queue,int(args.client_id), args.filepath,trade_lists))
-    process_write_result_to_file = multiprocessing.Process(target=write_result_to_file, args=(receive_queue,args.respath, int(args.client_id),trade_lists))
+    read_data_from_file(filepath, int(client_id), )
+    # process_read_data_from_file = multiprocessing.Process(target=read_data_from_file, args=(filepath, int(client_id), ))
+    process_put_data_in_queue = multiprocessing.Process(target=put_data_in_queue, args=(send_queue, filepath, int(client_id), trade_lists))
+    # process_communicate_with_server = multiprocessing.Process(target=communicate_with_server, args=(send_queue,receive_queue,int(client_id), filepath,trade_lists))
+    process_write_result_to_file = multiprocessing.Process(target=write_result_to_file, args=(receive_queue,respath, int(client_id),trade_lists))
     
-    process_read_data_from_file.start()
+    # process_read_data_from_file.start()
     #process_read_data_from_file.join()
     process_put_data_in_queue.start()
     #process_put_data_in_queue.join()
-    process_communicate_with_server.start()
+    # process_communicate_with_server.start()
     #process_communicate_with_server.join()
     process_write_result_to_file.start()
     #process_write_result_to_file.join()
-    process_list.append(process_read_data_from_file)
+    # process_list.append(process_read_data_from_file)
     process_list.append(process_put_data_in_queue)
-    process_list.append(process_communicate_with_server)
+    # process_list.append(process_communicate_with_server)
     process_list.append(process_write_result_to_file)
-    for p in process_list:
-        p.join()
+
+    return process_list

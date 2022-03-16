@@ -1,9 +1,10 @@
-from numpy import MachAr
-from ..connection.connection import ServerTCP
 from server import MatchingEngine
 from multiprocessing import Queue, Process
-from ..connection.connect_wrapper import connect
 import os
+import sys
+sys.path.append("..")
+from connection.connection import ServerTCP
+from connection.connect_wrapper import connect
 # path = os.path.join(os.path.dirname(__file__), os.pardir)
 # sys.path.append(path)
 

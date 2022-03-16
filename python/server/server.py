@@ -332,6 +332,8 @@ class OrderBook:
                 quotes += this_quotes
                 if order_remain.volume == 0:  
                     # the order is all filled
+                    if orderlink.cum == 0:
+                        self._remove_price_level(book_price, oppo_side)
                     is_remained = False
                     break
                 else:
@@ -381,6 +383,10 @@ class OrderBook:
                 order.price = price
                 this_quotes = self._create_price_level(order, side)
                 quotes += this_quotes
+            else:
+                if orderlink.cum == 0:
+                    self._remove_price_level(price, oppo_side)
+
         else:
             logging.info(f"Order ID: {order.order_id} - opposite side optimal order discarded, order book empty. ")
 
@@ -423,6 +429,8 @@ class OrderBook:
             quotes += this_quotes
             if order_remain.volume == 0:  
                 # the order is all filled
+                if orderlink.cum == 0:
+                    self._remove_price_level(book_price, oppo_side)
                 is_remained = False
                 break
             else:
@@ -561,9 +569,10 @@ class MatchingEngine:
         if order.type > 5: 
             logging.error(f"Order ID: {order.order_id} - invalid order type {order.type}")
             valid = False
-        if order.price > self.limit[order.stk_code-1][0] or order.price < self.limit[order.stk_code-1][1]:  # price range limit
-            logging.warning(f"Order ID: {order.order_id} - price {order.price} exceeds limit {self.limit[order.stk_code-1]}")
-            valid = False
+        if order.type == OrderType.LIMIT_ORDER:
+            if order.price > self.limit[order.stk_code-1][0] or order.price < self.limit[order.stk_code-1][1]:  # price range limit
+                logging.warning(f"Order ID: {order.order_id} - price {order.price} exceeds limit {self.limit[order.stk_code-1]}")
+                valid = False
 
         return valid 
 

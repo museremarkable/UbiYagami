@@ -38,7 +38,7 @@ def list_to_order(stk, x:list):
         order_id=int(orderId),
         direction=DirectionType(direction),
         price=price,
-        volume=volume,
+        volume=int(volume),
         type=OrderType(ordertype)
     )
     return order

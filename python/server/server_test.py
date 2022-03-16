@@ -14,12 +14,15 @@ class connect:
 	def recv_order(self):
 		return self.read_queue.get()
 
-	def send_feed(self,trade, quote):
-		self.send_t_queue.put(trade)
+	def send_feed(self, msg):
+		trade = msg.get('trade')
+		quote = msg.get('quote')
+		if trade is not None:
+			self.send_t_queue.put(trade)
 		self.send_q_queue.put(quote)
 
 if __name__ == "__main__":
-	trade_file = "trade_result"
+	trade_file = "python/server/trade2"
 	close_file = "data_test/100x10x10/price1.h5"
 	data_path = r"C:\Users\Leons\git\UbiYagami\data_test\100x10x10"
 
@@ -36,13 +39,13 @@ if __name__ == "__main__":
 	for x,y in zip(stk1_1, stk1_2):
 		orders += [list_to_order(2,x), list_to_order(2,y)]
 
-	engine = MatchingEngine(path_close=close_file)
 	qo, qt, qq = Queue(), Queue(), Queue()
 	connect_k = connect(qo, qt, qq)
-	engine.connect = connect_k
+	engine = MatchingEngine(connect_k, path_close=close_file)
+	# engine.connect = connect_k
 
 
-	p = Process(target=engine.engine_main_thread)
+	p = Process(target=engine.serialize_main_run)
 	p.start()
 
 	for o in orders:
@@ -51,13 +54,17 @@ if __name__ == "__main__":
 	sleep(10)
 
 	trades = []
+	i = 0
 	try:
 		while not qt.empty():
 			trade = qt.get()
+			print(f"Trade get {i}")
 			trades.append(trade)
+			i +=1
 	finally:
 		f = open(trade_file, 'wb')
-		f.write(b'##'.join(map(lambda x: x.to_bytes(), trades)))
+		print("write file")
+		f.write(b''.join(map(lambda x: x.to_bytes(), trades)))
 		f.close()
 
 	p.join(100)

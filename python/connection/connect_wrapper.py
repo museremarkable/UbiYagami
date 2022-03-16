@@ -1,4 +1,4 @@
-from python.server.data_type import OperationType, Order, Trade, Quote, DirectionType, OrderType
+from data_type import OperationType, Order, Trade, Quote, DirectionType, OrderType
 import json
 from multiprocessing import Queue
 from time import sleep

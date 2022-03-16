@@ -1,18 +1,23 @@
-from server import MatchingEngine
-from multiprocessing import Queue, Process
-import os
+<<<<<<< HEAD
 import sys
 sys.path.append("..")
-from connection.connection import ServerTCP
+sys.path.append("../utils")
+# from connection.connection import server
+from simple_server_test import server
+from server import MatchingEngine
+from multiprocessing import Queue, Process
 from connection.connect_wrapper import connect
+# from connection.connection import ServerTCP
+from connection.connect_wrapper import connect
+
 # path = os.path.join(os.path.dirname(__file__), os.pardir)
 # sys.path.append(path)
 
 if __name__ == "__main__":
 
 	trade_file = "trade_result"
-	close_file = "data_test/100x10x10/price1.h5"
-	data_path = r"C:\Users\Leons\git\UbiYagami\data_test\100x10x10"
+	close_file = "../../data/100x10x10/price1.h5"
+	data_path = "../../data/100x10x10"
 	host = '106.15.11.226'
 	port = 12345
 
@@ -25,7 +30,8 @@ if __name__ == "__main__":
 	p = Process(target=engine.serialize_main_run, args=())
 	process_list.append(p)
 	p.start()
-	p = Process(target=ServerTCP, args=(recv_queue, send_queue, host, port))
+	print('Add Process server TCP')
+	p = Process(target=server, args=(recv_queue, send_queue, ))#host, port
 	process_list.append(p)
 	p.start()
 

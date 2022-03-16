@@ -1,11 +1,11 @@
 import asyncio
 from asyncio import StreamWriter, StreamReader
 from wirte_logger import get_logger
+from data_trans import convert_msg2obj, convert_obj2msg
 from queue import Queue
 from enum import IntEnum
 import json
 import socket
-
 
 class Operation(IntEnum):
     HEARTBEAT = 0
@@ -25,11 +25,13 @@ class ServerTCP:
         self.order_queue = order_queue
         self.response_queue = response_queue
         self.log = get_logger(__name__, filename='streaming_server')
-        self.server_connection(self.host, self.port)
 
-    async def server_connection(self, host: str, port: int):
+    async def server_connection(self):
         "receive order from client , send result to two client"
+        host = self.host
+        port = self.port
         server = await asyncio.start_server(self.client_connected, host, port)
+        self.log.info(f"Build server {host}:{port}")
         async with server:
             await server.serve_forever()
 
@@ -40,11 +42,12 @@ class ServerTCP:
         :param writer:
         :return:
         '''
-        msg = await reader.readline()
+        # msg = await reader.readline()
         # todo: read n bytes
         # operation, args = msg.split(b'-')
         # operation = int(operation.decode())
         addr = writer.get_extra_info('peername')
+        asyncio.create_task(self._listen_for_stream(reader, writer))
         self._add_trade(addr, reader, writer)
         # if operation == Operation.HEARTBEAT:
         #     if addr not in self.trader2writer.keys():R
@@ -73,8 +76,8 @@ class ServerTCP:
         #     await writer.wait_closed()
 
     def _add_trade(self, trad_add, reader: StreamReader, writer: StreamWriter):
+        self.log.info(f"Connect with {trad_add}")
         self.trader2writer[trad_add] = writer
-        asyncio.create_task(self._listen_for_stream(trad_add, reader))
         asyncio.create_task(self._write_for_stream(trad_add, writer))
 
     async def _del_trade(self, trad_add):
@@ -89,12 +92,26 @@ class ServerTCP:
             self.log.error('Error closing client writer, ignoring.')
 
     async def _write_for_stream(self, trad_add, writer: StreamWriter):
+        '''
+        send bytes message to notify
+        :param trad_add:
+        :param writer:
+        :return:
+        '''
+        self.log.info('Write Stream begin')
         while True:
             try:
-                data = self.response_queue.get()
-                data = data.encode()
-                if data != b'\n' and data != b'':
-                    await self._notify_all(data)
+                if self.response_queue.empty():
+                    self.log.info('Response_queue is empty')
+                    await asyncio.sleep(0.1)
+                else:
+                    data = self.response_queue.get()
+                    #data = b'test without queue get'
+                    if type(data) != bytes and type(data) != str:
+                        data = convert_obj2msg(data)
+                    data = data + b'\n'
+                    if data != b'\n' and data != b'':
+                        await self._notify_all(data)
                 #     writer.write(data.encode()+b'\n')
                 #     print('Send {}'.format(data))
                 # await writer.drain()
@@ -103,28 +120,55 @@ class ServerTCP:
                 # await self._del_trade(trad_add)
                 await asyncio.sleep(1)
 
+    async def _listen_for_stream(self, reader: StreamReader, writer: StreamWriter):
+        self.log.info('listen_stream begin')
+        while True:
+            data = await reader.readline()
+            if data.startswith(b'CONNECT'):
+                self.log.info('Confirm connect')
+            else:
+                self.log.info('receive data{}'.format(data))
+                data = convert_msg2obj(data)
+                self.trans_stream2exchange(data)
+        # try:
+        #     # data = await reader.readuntil(separator=b'\n')
+        #     while (data := await reader.readline()) != b'':
+        #         self.log.info(f'received {data}')
+        #         if data.startswith(b'CONNECT'):
+        #             self.log.info('Confirm connect')
+        #         else:
+        #             data = convert_msg2obj(data)
+        #             self.trans_stream2exchange(data)
+        #     self.log.info('Connetion send no message')
+        # except Exception as e:
+        #     self.log.info('Error reading from client.Reason{}'.format(e))
+            # await self._del_trade(trad_add)
+        # while True:
+        #     try:
+        #         data = await reader.readuntil(separator=b'\n')
+        #         # data = await asyncio.wait_for(reader.readuntil(separator=b'\n'), 60)
+        #         self.log.info('received {}'.format(data))
+        #         if data.startswith(b'CONNECT'):
+        #             self.log.info('Confirm connect')
+        #         else:
+        #             if data == b'\n' or data == b'':
+        #                 pass
+        #                 #await asyncio.sleep(1)
+        #             else:
+        #                 # self.log.info(data.decode())
+        #                 data = convert_msg2obj(data)
+        #                 self.trans_stream2exchange(trad_add, data)
+        #         # writer.write(str(data).encode())
+        #         # await writer.drain()
+        #     # while(data := await asyncio.wait_for(reader.readline(),60)!=b''):
+        #     #     self.trans_stream2exchange(data)
+        #     except Exception as e:
+        #         self.log.error('Error reading from client.')
+        #         self.log.exception(e)
+        #         await self._del_trade(trad_add)
 
-    async def _listen_for_stream(self, trad_add, reader: StreamReader):#, writer: StreamWriter):
-        try:
-            while True:
-                data = await asyncio.wait_for(reader.readline(), 60)
-                print('received {}'.format(data))
-                if data == b'\n' or data == b'':
-                    #break
-                    data = b'test'
-                    await asyncio.sleep(1)
-                self.trans_stream2exchange(trad_add, data)
-                # writer.write(str(data).encode())
-                # await writer.drain()
-            # while(data := await asyncio.wait_for(reader.readline(),60)!=b''):
-            #     self.trans_stream2exchange(data)
-        except Exception as e:
-            self.log.error('Error reading from client.')
-            self.log.exception(e)
-            await self._del_trade(trad_add)
 
-
-    def trans_stream2exchange(self,trad_add, msg):
+    def trans_stream2exchange(self, msg):
         '''
         give stream to exchange.
         :return:
@@ -134,7 +178,6 @@ class ServerTCP:
         #operation = int(operation.decode())
         #print('receive{}'.format(msg))
         self.order_queue.put(msg)
-        self.response_queue.put(msg)
         # if operation == Operation.HEARTBEAT:
         #     pass
         # elif operation == Operation.RAW_ORDER:
@@ -180,6 +223,7 @@ class ServerTCP:
                 self.log.exception('Could not write to client.', exc_info=e)
                 inactive_trade.append(addr)
                 [await self._del_trade(username) for username in inactive_trade]
+        self.log.info('Send message {}'.format(msg))
 
 
 async def run_server(order_queue, response_queue):
@@ -197,7 +241,7 @@ async def run_server(order_queue, response_queue):
     host = host  # '106.15.11.226'
     port = 12345
     server = ServerTCP(order_queue, response_queue, host, port)
-    # await server.server_connection('127.0.0.1', 8000)
+    await server.server_connection()
 
 
 def server(order_queue, response_queue):

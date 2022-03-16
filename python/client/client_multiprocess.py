@@ -98,10 +98,12 @@ class data_read:
             self.all_page.append(curr_order_page)
             #temp_file_path = self.data_file_path + '/team-3/' + 'temp' + str(curr_stock_id + 1)
             temp_file_path = '/data/team-3/' + 'temp' + str(curr_stock_id + 1)
-            res = curr_order_page.tolist()
-            print(len(res[0]))
+
+            #res = curr_order_page.tolist()
+            #print(len(res[0]))
+
             with open(temp_file_path, 'wb') as f:
-                f.write(b''.join(map(lambda x: struct.pack("=iiidii", int(curr_stock_id), int(x[0]), int(x[1]), x[2], int(x[3]), int(x[4])), res)))
+                f.write(b''.join(map(lambda x: struct.pack("=iiidii", int(curr_stock_id), int(x[0]), int(x[1]), x[2], int(x[3]), int(x[4])),curr_order_page)))
 
 async def order_is_need_to_tans(order_id, stock_id, hook_mtx, hook_position, trade_list):
     """
@@ -156,8 +158,10 @@ async def order_is_need_to_tans(order_id, stock_id, hook_mtx, hook_position, tra
             return True               
 
 async def communicate_single_stock_with_server(i, data_file_path, send_queue, hook_mtx, hook_position, trade_lists):
+
     temp_file_path = '/data/team-3/' + 'temp' + str(i + 1)
     #temp_file_path = data_file_path + '/' + 'temp' + str(i + 1)
+
     order_list = read_binary_order_temp_file(temp_file_path)
     logger.info("start put orderid of stock %d in queue" % (i + 1))
         
@@ -239,7 +243,9 @@ def communicate_with_server(send_queue, receive_queue, client_id, data_file_path
     """
     function to square a given list
     """
+
     run_client(receive_queue,send_queue)
+
 
 def write_result_to_file(receive_queue, res_file_path, client_id, trade_lists):
     """

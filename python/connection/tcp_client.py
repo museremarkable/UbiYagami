@@ -33,9 +33,10 @@ class ClientTCP:
                 message = message.encode()
             if not message.endswith(b'\n'):
                 message = message + b'\n'
-            writer.write(message)
-            await writer.drain()
-            self.log.info(f'Send message {message}')
+            await self._notify_all(message)
+            # writer.write(message)
+            # await writer.drain()
+
             message = self.response_queue.get()
             if type(message)!=bytes and type(message)!=str:
                 message = convert_obj2msg(message)
@@ -62,7 +63,7 @@ class ClientTCP:
     async def client_connection(self, host, port):
         self.log.info('Connection begin')
         reader, writer = await asyncio.open_connection(host, port)
-        self.alive[host] = True
+        self.exchange2writer[host] = writer
         writer.write(f'CONNECT-{port}\n'.encode())
         await writer.drain()
         asyncio.create_task(self.send_message(host, writer))
@@ -70,9 +71,27 @@ class ClientTCP:
 
         # return reader, writer
 
+    async def _notify_all(self, msg):
+        # todo: response queue
+        # 广播
+        inactive_trade = []
+        for addr, writer in self.exchange2writer.items():
+            try:
+                if type(msg) == bytes:
+                    writer.write(msg)
+                else:
+                    writer.write(msg.encode())
+                await writer.drain()
+                await asyncio.sleep(1)
+            except ConnectionError as e:
+                self.log.exception('Could not write to client.', exc_info=e)
+                inactive_trade.append(addr)
+                [await self._del_trade(username) for username in inactive_trade]
+        self.log.info('Send message {}'.format(msg))
+
     async def reconnection(self, host, port):
         while True:
-            if host not in self.alive.keys():
+            if host not in self.exchange2writer.keys():
                 try:
                     await self.client_connection(host, port)
                     self.log.info('Connecting to server {}:{}'.format(host, port))

@@ -3,6 +3,7 @@ sys.path.append("")
 import asyncio
 from asyncio import StreamWriter, StreamReader
 from utils.wirte_logger import get_logger
+from utils.data_trans import convert_msg2obj, convert_obj2msg
 from queue import Queue
 import json
 import socket
@@ -25,19 +26,20 @@ class ClientTCP:
         '''send info to server'''
         message = self.response_queue.get()
         if type(message)!=bytes and type(message)!=str:
-            message = json.dumps(message.__dict__).encode()
+            message = convert_obj2msg(message)
+            #json.dumps(message.__dict__).encode()
         while message!=b'' and message!='':
             if type(message)!=bytes:
                 message = message.encode()
             if not message.endswith(b'\n'):
-                message = message+ b'\n'
+                message = message + b'\n'
             writer.write(message)
             await writer.drain()
             self.log.info(f'Send message {message}')
             message = self.response_queue.get()
             if type(message)!=bytes and type(message)!=str:
-                message = json.dumps(message.__dict__).encode()
-            await asyncio.sleep(2)
+                message = convert_obj2msg(message)
+            await asyncio.sleep(1)
         self.log.info('While statement is skipped')
         # del self.alive[host]
         # writer.close()
@@ -47,7 +49,8 @@ class ClientTCP:
         while True:
             data = await asyncio.wait_for(reader.readline(), 60)
             if data != b'\n' and data != b'':
-                print('Recieved {}'.format(data))
+                self.log.info('Recieved {}'.format(data))
+                data = convert_msg2obj(data)
                 self.response_queue.put(data)
                 await asyncio.sleep(1)
             else:
@@ -60,7 +63,7 @@ class ClientTCP:
         self.log.info('Connection begin')
         reader, writer = await asyncio.open_connection(host, port)
         self.alive[host] = True
-        writer.write(f'CONNECT {port}\n'.encode())
+        writer.write(f'CONNECT-{port}\n'.encode())
         await writer.drain()
         asyncio.create_task(self.send_message(host, writer))
         asyncio.create_task(self.listen_for_messages(host, reader))

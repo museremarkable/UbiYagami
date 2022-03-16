@@ -31,7 +31,7 @@ def read_binary_order_temp_file(data_file_path):
             data = f.read(struct_len)
             if not data: break
             s = struct_unpack(data)
-            results.append(Order(s[0], s[1], s[2], s[3], s[4], s[5]))
+            results.append(Order(s[0], s[1], DirectionType([2]), s[3], s[4], OrderType(s[5])))
     return results
 
 class data_read:
@@ -95,6 +95,7 @@ class data_read:
             curr_order_page = np.transpose([curr_order_id_page, curr_direction_page, curr_price_page, curr_volumn_page, curr_type_page])
             # sort curr_order_page by order_id
             curr_order_page = curr_order_page[curr_order_page[:, 0].argsort()] 
+            
             self.all_page.append(curr_order_page)
             #temp_file_path = self.data_file_path + '/team-3/' + 'temp' + str(curr_stock_id + 1)
             temp_file_path = '/data/team-3/' + 'temp' + str(curr_stock_id + 1)
@@ -168,7 +169,7 @@ async def communicate_single_stock_with_server(i, data_file_path, send_queue, ho
     for index in range(len(order_list)):
         order_id = order_list[index].order_id
         price = order_list[index].price
-        direction = order_list[index].direction
+        direction = DirectionType(order_list[index].direction)
         volume = order_list[index].volume
         type = OrderType(order_list[i].type)        
         if await order_is_need_to_tans(order_id, i, hook_mtx, hook_position, trade_lists):
@@ -259,9 +260,8 @@ def write_result_to_file(receive_queue, res_file_path, client_id, trade_lists):
         else:
             stock_id = Trade_Item.stk_code
             volume = Trade_Item.volume
-            row = trade_lists[stock_id - 1] # take the  row
-            row.append(volume) # change it
-            trade_lists[stock_id - 1] = row
+            trade_lists[stock_id - 1].append(volume) # take the  row
+
             #trade_lists[stock_id - 1].append(volume)
             res_path = res_file_path + '/' + 'trade' + str(stock_id)
             with open(res_path, 'wb') as f:
@@ -284,33 +284,10 @@ if __name__ == "__main__":
 
     manager = multiprocessing.Manager()
     # a simple implemment to achieve result
-    trade_lists = manager.list()
+    trade_lists = []
     for i in range(10):
-        trade_lists.append([])
-    '''EXAMPLE
-    from multiprocessing import Process, Manager
-
-    def f(L):
-        row = L[0] # take the 1st row
-        row.append(10) # change it
-
-        L[0] = row #NOTE: important: copy the row back (otherwise parent
-                #process won't see the changes)
-
-    if __name__ == '__main__':
-        manager = Manager()
-
-        lst = manager.list()
-        lst.append([1])
-        lst.append([2, 3])
-        print(lst) # before: [[1], [2, 3]]
-
-        p = Process(target=f, args=(lst,))
-        p.start()
-        p.join()
-
-        print(lst) # after: [[1, 10], [2, 3]]
-    '''
+        trade_lists.append(manager.list())
+   
 
     logger.info("===============data read finished==============")
     logger.info("==========================client server %s begin===========================" % args.client_id)
@@ -326,14 +303,14 @@ if __name__ == "__main__":
     process_write_result_to_file = multiprocessing.Process(target=write_result_to_file, args=(receive_queue,args.respath, int(args.client_id),trade_lists))
     
     process_read_data_from_file.start()
-    #process_read_data_from_file.join()
+    process_read_data_from_file.join()
     process_put_data_in_queue.start()
     #process_put_data_in_queue.join()
     process_communicate_with_server.start()
     #process_communicate_with_server.join()
     process_write_result_to_file.start()
     #process_write_result_to_file.join()
-    process_list.append(process_read_data_from_file)
+
     process_list.append(process_put_data_in_queue)
     process_list.append(process_communicate_with_server)
     process_list.append(process_write_result_to_file)

@@ -51,6 +51,20 @@ Message headers:
 		Q: Quote
 """
 
+
+class connect:
+	def __init__(self, recv_queue, send_queue):
+		self.read_queue = recv_queue
+		self.send_queue = send_queue
+		# self.send_q_queue = qq
+
+	def recv_order(self):
+		return self.read_queue.get()
+
+	def send_feed(self, message: dict):
+		self.send_queue.put(message)
+
+
 class ConnectServer():
 	def __init__(self):
 		self.feed_waiting_list = {}
@@ -133,7 +147,7 @@ class ConnectClient():
 				message = self._recv_message()
 				if message is not None:
 					message = json.loads(message)
-					ack = message.get['A']
+					ack = message.get('A')
 					feed = message.get('F')
 					if ack is not None:
 						self.ack_queue.put(ack)

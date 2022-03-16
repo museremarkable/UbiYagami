@@ -1,6 +1,8 @@
+import sys 
+sys.path.append("")
 import asyncio
 from asyncio import StreamWriter, StreamReader
-from wirte_logger import get_logger
+from utils.wirte_logger import get_logger
 from queue import Queue
 import json
 import socket

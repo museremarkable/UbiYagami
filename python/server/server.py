@@ -642,7 +642,7 @@ class MatchingEngine:
                 while self.order_cache[order.stk_code].get(self.next_order_id[order.stk_code]) is not None:
                     order = self.order_cache[order.stk_code].pop(self.next_order_id[order.stk_code]) 
                     self._put_queue_valid_order(order)
-            else: 
+            elif order.order_id > self.next_order_id[order.stk_code]: 
                 self.order_cache[order.stk_code][order.order_id] = order
 
             self._handle_order_all_stock_single_loop()

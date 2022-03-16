@@ -16,6 +16,7 @@ logging.basicConfig(level=logging.DEBUG #设置日志输出格式
                     ,datefmt="%Y-%m-%d %H:%M:%S" #时间输出的格式
                     )
 
+
 class BookBase:
     """
     For database based book caching
@@ -31,6 +32,7 @@ class BookBase:
 
     def storage_match():
         pass
+
 
 class OrderLink:
     """
@@ -514,7 +516,7 @@ class MatchingEngine:
     * order id sorting
     * order checking (out of price range limit, volume>0, price>0, id>0)
     """
-    def __init__(self, path_close="data_test/100x10x10/price1.h5"):
+    def __init__(self, connect, path_close="data_test/100x10x10/price1.h5"):
         self.order_books = {}       # order book of different stocks
         self.next_order_id = {}
         self.order_queue = Queue()
@@ -526,7 +528,7 @@ class MatchingEngine:
         self.flip_unit = 0.01
         self.limit = list(map(self._limit_calculate, price_mtx))
 
-        self.connect = None     # TODO TBA
+        self.connect = connect     # TODO TBA
 
 
     def _limit_calculate(self, close):
@@ -539,13 +541,8 @@ class MatchingEngine:
     def _recv_order(self) -> Order:
         return self.connect.recv_order()
 
-    def _send_feed(self, trades: List[Trade], quotes: List[Quote]):
-        for x in trades:
-            # self.connect.send({'trade':x})
-            self.connect.send_feed(x)
-        # for x in quotes:
-        #     self.connect.send({'quote': x})
-
+    def _send_feed(self, message: dict):
+        self.connect.send_feed(message)
 
     def _check_order(self, order: Order):
         valid = True

@@ -404,25 +404,31 @@ def communicate_with_server(send_queue, receive_queue, client_id, data_file_path
     """
     run_client(receive_queue,send_queue)
 
+
 def write_result_to_file(receive_queue, res_file_path, client_id, trade_lists):
     """
     function to print queue elements
     """
     logger.info("WRITE FILE PROCESS: RES PATH %s CLIENT_ID %d " % (res_file_path, client_id))
     while True:
-        Trade_Item = receive_queue.get()
-        if Trade_Item == "DONE":
-            break
+        if not receive_queue.empty():
+            Trade_Item = receive_queue.get_nowait()
+            if Trade_Item == "DONE":
+                break
+            else:
+                stock_id = Trade_Item.stk_code
+                volume = Trade_Item.volume
+                row = trade_lists[stock_id - 1] # take the  row
+                row.append(volume) # change it
+                trade_lists[stock_id - 1] = row
+                # logger.info('GET TRADE {}'.format(type(b''.join(Trade_Item.to_bytes()))))
+                # logger.info('GET TRADE {}'.format(b''.join(Trade_Item.to_bytes())))
+                # trade_lists[stock_id - 1].append(volume)
+                res_path = res_file_path + '/' + 'trade' + str(stock_id)
+                with open(res_path, 'ab') as f:
+                    f.write(Trade_Item.to_bytes())
         else:
-            stock_id = Trade_Item.stk_code
-            volume = Trade_Item.volume
-            row = trade_lists[stock_id - 1] # take the  row
-            row.append(volume) # change it
-            trade_lists[stock_id - 1] = row
-            #trade_lists[stock_id - 1].append(volume)
-            res_path = res_file_path + '/' + 'trade' + str(stock_id)
-            with open(res_path, 'wb') as f:
-                f.write(b''.join(Trade_Item.to_bytes()))
+            time.sleep(2)
     '''     
     for stock_id in range(10):
         res_path = res_file_path + '/' + 'trade' + str(stock_id + 1)

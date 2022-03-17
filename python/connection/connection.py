@@ -133,6 +133,7 @@ class ServerTCP:
                 self.log.info('receive data{}'.format(data))
                 data = convert_msg2obj(data)
                 self.trans_stream2exchange(data)
+            await asyncio.sleep(0.05)
         # try:
         #     # data = await reader.readuntil(separator=b'\n')
         #     while (data := await reader.readline()) != b'':

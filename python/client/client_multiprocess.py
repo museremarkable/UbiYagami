@@ -47,7 +47,7 @@ def read_binary_order_temp_file(data_file_path):
             data = f.read(struct_len)
             if not data: break
             s = struct_unpack(data)
-            results.append(Order(s[0], s[1], s[2], s[3], s[4], s[5]))
+            results.append(Order(s[0] + 1, s[1], s[2], s[3], s[4], s[5]))
     return results
 
 class data_read:

@@ -40,7 +40,7 @@ class ClientTCP:
             message = self.response_queue.get()
             if type(message)!=bytes and type(message)!=str:
                 message = convert_obj2msg(message)
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.01)
         self.log.info('While statement is skipped')
         # del self.alive[host]
         # writer.close()
@@ -52,12 +52,12 @@ class ClientTCP:
             if data != b'\n' and data != b'':
                 self.log.info('Recieved {}'.format(data))
                 data = convert_msg2obj(data)
-                self.response_queue.put(data)
-                await asyncio.sleep(1)
+                self.order_queue.put(data)
+                await asyncio.sleep(0.01)
             else:
                 # del self.alive[host]
                 #break
-                await asyncio.sleep(2)
+                await asyncio.sleep(0.1)
         print('Server closed connection.')
 
     async def client_connection(self, host, port):
@@ -82,14 +82,14 @@ class ClientTCP:
                 else:
                     writer.write(msg.encode())
                 await writer.drain()
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.05)
             except ConnectionError as e:
                 self.log.exception('Could not write to client.', exc_info=e)
                 inactive_trade.append(addr)
                 [await self._del_exchange(username) for username in inactive_trade]
         self.log.info('Send message {}'.format(msg))
 
-    async def _del_exchange(self):
+    async def _del_exchange(self, trad_add):
         try:
             writer = self.exchange2writer[trad_add]
             del self.exchange2writer[trad_add]

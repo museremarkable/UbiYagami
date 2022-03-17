@@ -618,6 +618,7 @@ class MatchingEngine:
         self.next_order_id[order.stk_code] += 1
         if self._check_order(order):               # if is valid order
             logging.info(f"Order ID: {order.order_id} - put order to order queue")
+            print("put order to order queue")
             self.order_queue.put(order)
         else:
             logging.info(f"Order ID: {order.order_id} - order discarded")
@@ -636,9 +637,11 @@ class MatchingEngine:
 
     def _handle_order_all_stock_single_loop(self):
         while not self.order_queue.empty():
+            print("get order for internal order queue")
             order = self.order_queue.get()
             order_type = order.type 
             stock = order.stk_code
+            print(f"Order ID: {order.order_id} - {order_type} order executing")
             logging.info(f"Order ID: {order.order_id} - {order_type} order executing")
             if order_type == OrderType.LIMIT_ORDER:
                 trades, quotes = self.order_books[stock].handle_order_limit(order.to_suborder())
@@ -661,10 +664,13 @@ class MatchingEngine:
         """
         while True:
             order = self._recv_order()
+            # order.stk_code += 1
+            print(f"receive order from connect {order.order_id} of stock {order.stk_code} type {order.type}")
             if self.order_books.get(order.stk_code) is None:
                 self._new_stock_symbol(order.stk_code)
             
             if order.order_id == self.next_order_id[order.stk_code]:        # if hit next order_id
+                print("Order matches the next order ID !!!!")
                 self._put_queue_valid_order(order)
                 # if the next id has already been waiting in cache
                 while self.order_cache[order.stk_code].get(self.next_order_id[order.stk_code]) is not None:
@@ -672,6 +678,8 @@ class MatchingEngine:
                     self._put_queue_valid_order(order)
             elif order.order_id > self.next_order_id[order.stk_code]: 
                 self.order_cache[order.stk_code][order.order_id] = order
+                print(f"Push order to cache for reordering {self.order_cache[order.stk_code]}")
+                print(f"Next order ID: {self.next_order_id[order.stk_code]}")
 
             self._handle_order_all_stock_single_loop()
 
@@ -679,10 +687,12 @@ class MatchingEngine:
                 trades, quotes = self.feed_queue.get()
                 if len(quotes) !=0:
                     minlen = len(trades)
+                    print("send feed")
                     for i in range(minlen):
-                        self._send_feed({'trade':trades[i], 'quote':quotes[i]})
-                    for q in quotes[minlen:]:
-                        self._send_feed({'quote':q})
+                        # self._send_feed({'trade':trades[i], 'quote':quotes[i]})
+                        self._send_feed(trades[i])
+                    # for q in quotes[minlen:]:
+                    #     self._send_feed({'quote':q})
 
 
     def update_order_queue_thread(self, order_queues: List[Queue], feed_queues: List[Queue]): #, order_queue: Queue, feed_queue: Queue):

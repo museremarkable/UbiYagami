@@ -230,11 +230,7 @@ class Client:
             # asynchronous send data
             #await self.communicate_with_server(curr_order_page, hook_mtx, curr_stock_id, res_file_path)
     '''
-    #async def communicate_with_server(self, send_queue, receive_queue):
-        """
-        communicate all data with server
-        why use async not multiprocess
-        """
+
         
        
              
@@ -397,7 +393,7 @@ class Client:
     #     res_file_path = self.res_file_path + '/' + 'trade' + str(stock_id)
     #     with open(res_file_path, 'wb') as f:
     #         f.write(b''.join(map(lambda x: x.to_bytes(), self.trade_list[stock_id])))
-async run
+
 
 if __name__ == "__main__":
     # input list

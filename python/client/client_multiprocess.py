@@ -47,7 +47,7 @@ def read_binary_order_temp_file(data_file_path):
             data = f.read(struct_len)
             if not data: break
             s = struct_unpack(data)
-            results.append(Order(s[0], s[1], s[2], s[3], s[4], s[5]))
+            results.append(Order(s[0] + 1, s[1], s[2], s[3], s[4], s[5]))
     return results
 
 class data_read:
@@ -380,10 +380,10 @@ def put_data_in_queue(send_queue, data_file_path, client_id, trade_lists):
                 curr_order_position[stock_id] = temp_order_position
             #到达trade_list末尾，置-1
             if temp_order_position == len(order_list):
-                curr_order_position[stock_id] == -1
+                curr_order_position[stock_id] = -1
                 stock_id += 1
                 break
-            if temp_order_position[stock_id] == -1:
+            if curr_order_position[stock_id] == -1:
                 stock_id += 1
                 break
         
@@ -432,7 +432,7 @@ if __name__ == "__main__":
     args = parser.parse_args()    
     logger.info("===============begin to read data==============")
     with record_time():
-        order_data = data_read(args.filepath, 1)
+        order_data = data_read(args.filepath, args.client_id)
         batch_size = 4
         query_list = make_batches(10,batch_size)
         # order_data.data_read()

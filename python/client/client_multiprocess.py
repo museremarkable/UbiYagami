@@ -432,7 +432,7 @@ if __name__ == "__main__":
     args = parser.parse_args()    
     logger.info("===============begin to read data==============")
     with record_time():
-        order_data = data_read(args.filepath, 1)
+        order_data = data_read(args.filepath, args.client_id)
         batch_size = 4
         query_list = make_batches(10,batch_size)
         # order_data.data_read()

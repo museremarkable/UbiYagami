@@ -1,16 +1,20 @@
 import sys
 sys.path.append("..")
 sys.path.append("../utils")
-# from connection.connection import server
-from simple_server_test import server
+from connection.connection import server
+# from simple_server_test import server
 from server import MatchingEngine
 from multiprocessing import Queue, Process
-from connection.connect_wrapper import connect
-# from connection.connection import ServerTCP
 from connection.connect_wrapper import connect
 
 # path = os.path.join(os.path.dirname(__file__), os.pardir)
 # sys.path.append(path)
+
+def exchange(recv_queue, send_queue):
+       connect_kernel = connect(recv_queue=recv_queue, send_queue=send_queue)
+       engine = MatchingEngine(connect=connect_kernel, path_close=close_file)
+       engine.serialize_main_run()
+
 
 if __name__ == "__main__":
 
@@ -22,15 +26,16 @@ if __name__ == "__main__":
 
 	recv_queue, send_queue = Queue(), Queue()
 	# server = ServerTCP(recv_queue, send_queue, host, port)
-	connect_kernel = connect(recv_queue=recv_queue, send_queue=send_queue)
-	engine = MatchingEngine(connect=connect_kernel, path_close=close_file)
+	# connect_kernel = connect(recv_queue=recv_queue, send_queue=send_queue)
+	# engine = MatchingEngine(connect=connect_kernel, path_close=close_file)
 
 	process_list = []
-	p = Process(target=engine.serialize_main_run, args=())
+	# p = Process(target=engine.serialize_main_run, args=())
+	p = Process(target=exchange, args=(recv_queue, send_queue ))
 	process_list.append(p)
 	p.start()
 	print('Add Process server TCP')
-	p = Process(target=server, args=(recv_queue, send_queue, ))#host, port
+	p = Process(target=server, args=(recv_queue, send_queue, ))
 	process_list.append(p)
 	p.start()
 

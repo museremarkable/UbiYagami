@@ -222,7 +222,7 @@ class ServerTCP:
                 else:
                     writer.write(msg.encode())
                 await writer.drain()
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.05)
             except ConnectionError as e:
                 self.log.exception('Could not write to client.', exc_info=e)
                 inactive_trade.append(addr)

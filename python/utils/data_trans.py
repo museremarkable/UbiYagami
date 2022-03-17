@@ -10,7 +10,6 @@ def convert_obj2msg(obj):
     msg_type = type(obj).__name__.encode()
     return msg_type+ b'#'+ msg_content
 
-@pysnooper.snoop(output = 'data_trans.log')
 def convert_msg2obj(msg):
     msg_type, msg_content = [x.decode() for x in msg.split(b'#')]
     msg_content = json.loads(msg_content)

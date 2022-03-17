@@ -8,21 +8,13 @@ import logging
 from time import sleep
 import h5py
 
-# logging = logging.getlogging()
-# logging.basicConfig(level=logging.DEBUG #设置日志输出格式
-#                     ,filename="exchange_runtime.log" #log日志输出的文件位置和文件名
-#                     ,filemode="w" #文件的写入格式，w为重新写入文件，默认是追加
-#                     ,format="%(asctime)s - %(name)s - %(levelname)-9s - %(filename)-8s : %(lineno)s line - %(message)s" #日志输出的格式
-#                     # -8表示占位符，让输出左对齐，输出长度都为8位
-#                     ,datefmt="%Y-%m-%d %H:%M:%S" #时间输出的格式
-#                     )
-
-logger = logging.getlogger("MatchingEngine")
-handler = logging.FileHandler('./exchange_runtime.log')
-logging.basicConfig(level=logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s  %(name)s  %(levelname)s: %(message)s')
-logger.addHandler(handler)
-handler.setFormatter(formatter)
+logging.basicConfig(level=logging.DEBUG #设置日志输出格式
+                    ,filename="exchange_runtime.log" #log日志输出的文件位置和文件名
+                    ,filemode="w" #文件的写入格式，w为重新写入文件，默认是追加
+                    ,format="%(asctime)s - %(name)s - %(levelname)-9s - %(filename)-8s : %(lineno)s line - %(message)s" #日志输出的格式
+                    # -8表示占位符，让输出左对齐，输出长度都为8位
+                    ,datefmt="%Y-%m-%d %H:%M:%S" #时间输出的格式
+                    )
 
 
 class BookBase:
@@ -705,26 +697,32 @@ class MatchingEngine:
 
         while True:
             order = self._recv_order()
+            print(f"receive order from connect {order.order_id} of stock {order.stk_code} type {order.type}")
             if self.order_books.get(order.stk_code) is None:
                 self._new_stock_symbol(order.stk_code)
             
             if order.order_id == self.next_order_id[order.stk_code]:        # if hit next order_id
+                print("Order matches the next order ID !!!!")
                 self._put_multi_queue_valid_order(order)
                 # if the next id has already been waiting in cache
                 while self.order_cache[order.stk_code].get(self.next_order_id[order.stk_code]) is not None:
                     order = self.order_cache[order.stk_code].pop(self.next_order_id[order.stk_code]) 
                     self._put_multi_queue_valid_order(order)
-            else: 
+            elif order.order_id > self.next_order_id[order.stk_code]: 
                 self.order_cache[order.stk_code][order.order_id] = order
+                print(f"Push order to cache for reordering {self.order_cache[order.stk_code]}")
+                print(f"Next order ID: {self.next_order_id[order.stk_code]}")
 
             trades, quotes = self._get_multi_queue_feeds()  # TODO improve message congestion blocking
             if len(quotes) !=0:
                 logging.info(f"Sending back feeds")
                 minlen = len(trades)
+                print("send feed")
                 for i in range(minlen):
-                    self._send_feed({'trade':trades[i], 'quote':quotes[i]})
-                for q in quotes[minlen:]:
-                    self._send_feed({'quote':q})
+                    # self._send_feed({'trade':trades[i], 'quote':quotes[i]})
+                    self._send_feed(trades[i])
+                # for q in quotes[minlen:]:
+                #     self._send_feed({'quote':q})
 
 
     def handle_order_all_stocks_thread(self, order_queue, feed_queue):
@@ -737,10 +735,12 @@ class MatchingEngine:
         
         while True:
             order = self._get_queue_valid_order()
+            print(f"Matchiing thread got an order from outter queue {order.order_id} of stock{order.stk_code}")
             if self.order_books.get(order.stk_code) is None:
                 self._new_stock_symbol(order.stk_code)
             order_type = order.type 
             stock = order.stk_code
+            print(f"Order ID: {order.order_id} - {order_type} order executing")
             logging.info(f"Order ID: {order.order_id} - {order_type} order executing")
             if order_type == OrderType.LIMIT_ORDER:
                 trades, quotes = self.order_books[stock].handle_order_limit(order.to_suborder())

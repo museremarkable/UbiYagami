@@ -105,10 +105,13 @@ class ServerTCP:
                     self.log.info('Response_queue is empty')
                     await asyncio.sleep(0.1)
                 else:
+                    
                     data = self.response_queue.get()
+                    self.log.info("the data get from response is", data)
                     #data = b'test without queue get'
                     if type(data) != bytes and type(data) != str:
                         data = convert_obj2msg(data)
+                        self.log.info("the data get from response after convert is", data)
                     data = data + b'\n'
                     if data != b'\n' and data != b'':
                         await self._notify_all(data)

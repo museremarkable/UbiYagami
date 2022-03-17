@@ -51,7 +51,9 @@ class ClientTCP:
             data = await asyncio.wait_for(reader.readline(), 60)
             if data != b'\n' and data != b'':
                 self.log.info('Recieved {}'.format(data))
+                self.log.info("data before convert", data)
                 data = convert_msg2obj(data)
+                self.log.info("data after convert", data)
                 self.response_queue.put(data)
                 await asyncio.sleep(1)
             else:

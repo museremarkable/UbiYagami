@@ -230,7 +230,7 @@ class ServerTCP:
         self.log.info('Send message {}'.format(msg))
 
 
-async def run_server(order_queue, response_queue):
+async def run_server(order_queue, response_queue, port):
     # order_queue = Queue()
     # response_queue = Queue()
     # count = 0
@@ -242,14 +242,12 @@ async def run_server(order_queue, response_queue):
     s.connect(("8.8.8.8", 80))
     host = s.getsockname()[0]
     s.close()
-    host = host  # '106.15.11.226'
-    port = 62345
     server = ServerTCP(order_queue, response_queue, host, port)
     await server.server_connection()
 
 
-def server(order_queue, response_queue):
-    asyncio.run(run_server(order_queue, response_queue))
+def server(order_queue, response_queue, port):
+    asyncio.run(run_server(order_queue, response_queue, port))
 
 
 

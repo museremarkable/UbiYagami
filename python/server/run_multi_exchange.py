@@ -1,5 +1,7 @@
 
 import sys
+
+from numpy import mat
 sys.path.append("..")
 sys.path.append("../utils")
 from connection.connection import server
@@ -12,7 +14,7 @@ from connection.connect_wrapper import connect
 def exchange(recv_queue, send_queue):
        connect_kernel = connect(recv_queue=recv_queue, send_queue=send_queue)
        engine = MatchingEngine(connect=connect_kernel, path_close=close_file)
-       engine.serialize_main_run()
+       engine.engine_main_thread(matching_threads=2)
 
 
 if __name__ == "__main__":

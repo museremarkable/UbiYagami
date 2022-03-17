@@ -8,13 +8,21 @@ import logging
 from time import sleep
 import h5py
 
-logging.basicConfig(level=logging.DEBUG #设置日志输出格式
-                    ,filename="exchange_runtime.log" #log日志输出的文件位置和文件名
-                    ,filemode="w" #文件的写入格式，w为重新写入文件，默认是追加
-                    ,format="%(asctime)s - %(name)s - %(levelname)-9s - %(filename)-8s : %(lineno)s line - %(message)s" #日志输出的格式
-                    # -8表示占位符，让输出左对齐，输出长度都为8位
-                    ,datefmt="%Y-%m-%d %H:%M:%S" #时间输出的格式
-                    )
+# logging = logging.getlogging()
+# logging.basicConfig(level=logging.DEBUG #设置日志输出格式
+#                     ,filename="exchange_runtime.log" #log日志输出的文件位置和文件名
+#                     ,filemode="w" #文件的写入格式，w为重新写入文件，默认是追加
+#                     ,format="%(asctime)s - %(name)s - %(levelname)-9s - %(filename)-8s : %(lineno)s line - %(message)s" #日志输出的格式
+#                     # -8表示占位符，让输出左对齐，输出长度都为8位
+#                     ,datefmt="%Y-%m-%d %H:%M:%S" #时间输出的格式
+#                     )
+
+logger = logging.getlogger("MatchingEngine")
+handler = logging.FileHandler('./exchange_runtime.log')
+logging.basicConfig(level=logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s  %(name)s  %(levelname)s: %(message)s')
+logger.addHandler(handler)
+handler.setFormatter(formatter)
 
 
 class BookBase:
@@ -529,6 +537,8 @@ class MatchingEngine:
         self.next_order_id = {}
         self.order_queue = Queue()
         self.feed_queue = Queue()
+        self.multi_order_queue =  []
+        self.multi_feed_queue =  []
         self.order_cache = {}   # list of dicts
         # data_file_path = 'data_test/100x10x10'
         # prev_price_path = data_file_path + '/'+ "price1.h5"
@@ -595,11 +605,29 @@ class MatchingEngine:
         else: 
             return None, None
 
+    def _get_multi_queue_feeds(self) -> Tuple[List[Trade], List[Quote]]:
+        feeds = ([], [])
+        for q in self.multi_feed_queue:
+            if not q.empty():
+                this_feed = self.feed_queue.get()
+                feeds[0] += this_feed[0]
+                feeds[1] += this_feed[1]
+        return feeds
+
     def _put_queue_valid_order(self, order: Order):
         self.next_order_id[order.stk_code] += 1
         if self._check_order(order):               # if is valid order
+            logging.info(f"Order ID: {order.order_id} - put order to order queue")
             print("put order to order queue")
             self.order_queue.put(order)
+        else:
+            logging.info(f"Order ID: {order.order_id} - order discarded")
+
+    def _put_multi_queue_valid_order(self, order: Order):
+        self.next_order_id[order.stk_code] += 1
+        if self._check_order(order):               # if is valid order
+            logging.info(f"Order ID: {order.order_id} - put order to order queue")
+            self.multi_order_queue[order.stk_code%len(self.multi_order_queue)].put(order)
         else:
             logging.info(f"Order ID: {order.order_id} - order discarded")
 
@@ -657,7 +685,7 @@ class MatchingEngine:
 
             while not self.feed_queue.empty():
                 trades, quotes = self.feed_queue.get()
-                if len(trades) !=0:
+                if len(quotes) !=0:
                     minlen = len(trades)
                     print("send feed")
                     for i in range(minlen):
@@ -667,13 +695,13 @@ class MatchingEngine:
                     #     self._send_feed({'quote':q})
 
 
-    def update_order_queue_thread(self): #, order_queue: Queue, feed_queue: Queue):
+    def update_order_queue_thread(self, order_queues: List[Queue], feed_queues: List[Queue]): #, order_queue: Queue, feed_queue: Queue):
         """
         Feed queue
         When a new order arrived, update the current order_id and put it into the queue if valid
         """
-        # self.feed_queue = feed_queue
-        # self.order_queue = order_queue
+        self.multi_feed_queue = feed_queues
+        self.multi_order_queue = order_queues
 
         while True:
             order = self._recv_order()
@@ -681,16 +709,17 @@ class MatchingEngine:
                 self._new_stock_symbol(order.stk_code)
             
             if order.order_id == self.next_order_id[order.stk_code]:        # if hit next order_id
-                self._put_queue_valid_order(order)
+                self._put_multi_queue_valid_order(order)
                 # if the next id has already been waiting in cache
                 while self.order_cache[order.stk_code].get(self.next_order_id[order.stk_code]) is not None:
                     order = self.order_cache[order.stk_code].pop(self.next_order_id[order.stk_code]) 
-                    self._put_queue_valid_order(order)
+                    self._put_multi_queue_valid_order(order)
             else: 
                 self.order_cache[order.stk_code][order.order_id] = order
 
-            trades, quotes = self._get_queue_feeds()  # TODO improve message congestion blocking
-            if len(trades) !=0:
+            trades, quotes = self._get_multi_queue_feeds()  # TODO improve message congestion blocking
+            if len(quotes) !=0:
+                logging.info(f"Sending back feeds")
                 minlen = len(trades)
                 for i in range(minlen):
                     self._send_feed({'trade':trades[i], 'quote':quotes[i]})
@@ -698,16 +727,18 @@ class MatchingEngine:
                     self._send_feed({'quote':q})
 
 
-    def handle_order_all_stocks_thread(self):
+    def handle_order_all_stocks_thread(self, order_queue, feed_queue):
         """
         Consume queue
         Read reordered orders from the queue, and handle them according to order types
         """
-        # self.feed_queue = feed_queue
-        # self.order_queue = order_queue
+        self.feed_queue = feed_queue
+        self.order_queue = order_queue
         
         while True:
             order = self._get_queue_valid_order()
+            if self.order_books.get(order.stk_code) is None:
+                self._new_stock_symbol(order.stk_code)
             order_type = order.type 
             stock = order.stk_code
             logging.info(f"Order ID: {order.order_id} - {order_type} order executing")
@@ -727,20 +758,23 @@ class MatchingEngine:
             self._put_queue_feeds(trades, quotes)
 
 
-    def engine_main_thread(self):
+    def engine_main_thread(self, matching_threads=2):
         """
         start up threads here
         """
         process_list = []
-        for i in range(1):
-            p = Process(target=self.handle_order_all_stocks_thread, args=())
+        order_queues = [Queue()] * matching_threads
+        feed_queues = [Queue()] * matching_threads
+
+        for i in range(matching_threads):
+            p = Process(target=self.handle_order_all_stocks_thread, args=(order_queues[i], feed_queues[i]))
+            p.start()
             process_list.append(p)
 
-        p = Process(target=self.update_order_queue_thread, args=())
+        p = Process(target=self.update_order_queue_thread, args=(order_queues, feed_queues))
+        p.start()
         process_list.append(p)
 
-        for p in process_list:
-            p.start()
 
         for p in process_list:
             p.join()

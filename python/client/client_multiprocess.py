@@ -380,10 +380,10 @@ def put_data_in_queue(send_queue, data_file_path, client_id, trade_lists):
                 curr_order_position[stock_id] = temp_order_position
             #到达trade_list末尾，置-1
             if temp_order_position == len(order_list):
-                curr_order_position[stock_id] == -1
+                curr_order_position[stock_id] = -1
                 stock_id += 1
                 break
-            if temp_order_position[stock_id] == -1:
+            if curr_order_position[stock_id] == -1:
                 stock_id += 1
                 break
         

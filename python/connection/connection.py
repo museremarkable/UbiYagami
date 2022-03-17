@@ -102,16 +102,16 @@ class ServerTCP:
         while True:
             try:
                 if self.response_queue.empty():
-                    self.log.info('Response_queue is empty')
+                    # self.log.info('Response_queue is empty')
                     await asyncio.sleep(0.1)
                 else:
                     
                     data = self.response_queue.get()
-                    self.log.info("the data get from response is", data)
+                    # self.log.info("the data get from response is", data.stk_code)
                     #data = b'test without queue get'
                     if type(data) != bytes and type(data) != str:
                         data = convert_obj2msg(data)
-                        self.log.info("the data get from response after convert is", data)
+                        # self.log.info("the data get from response after convert is", data)
                     data = data + b'\n'
                     if data != b'\n' and data != b'':
                         await self._notify_all(data)
@@ -242,7 +242,7 @@ async def run_server(order_queue, response_queue):
     host = s.getsockname()[0]
     s.close()
     host = host  # '106.15.11.226'
-    port = 12345
+    port = 62345
     server = ServerTCP(order_queue, response_queue, host, port)
     await server.server_connection()
 

@@ -14,7 +14,7 @@ class ClientTCP:
         self.ip_address = ["10.216.68.191", '10.216.68.192']
         self.alive = {}
         self.exchange2writer = {}
-        self.binding_port = 12345
+        self.binding_port = 62345
         "0 is normal, differnet number corresponding different stastus"
         self.ports_status = [0, 0, 0]
         self.log = get_logger(__name__, filename='streaming_client')
@@ -51,9 +51,7 @@ class ClientTCP:
             data = await asyncio.wait_for(reader.readline(), 60)
             if data != b'\n' and data != b'':
                 self.log.info('Recieved {}'.format(data))
-                self.log.info("data before convert", data)
                 data = convert_msg2obj(data)
-                self.log.info("data after convert", data)
                 self.response_queue.put(data)
                 await asyncio.sleep(1)
             else:
@@ -88,8 +86,18 @@ class ClientTCP:
             except ConnectionError as e:
                 self.log.exception('Could not write to client.', exc_info=e)
                 inactive_trade.append(addr)
-                [await self._del_trade(username) for username in inactive_trade]
+                [await self._del_exchange(username) for username in inactive_trade]
         self.log.info('Send message {}'.format(msg))
+
+    async def _del_exchange(self):
+        try:
+            writer = self.exchange2writer[trad_add]
+            del self.exchange2writer[trad_add]
+            writer.close()
+            await writer.wait_closed()
+            self.log.info(f'Delete trade{trad_add}')
+        except Exception as e:
+            self.log.error('Error closing client writer, ignoring.')
 
     async def reconnection(self, host, port):
         while True:

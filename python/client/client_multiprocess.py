@@ -1,5 +1,7 @@
 import os
 import sys
+
+from sqlalchemy import false
 path = os.path.join(os.path.dirname(__file__), os.pardir)
 sys.path.append(path)
 #from client.client import Client
@@ -31,7 +33,7 @@ def read_binary_order_temp_file(data_file_path):
             data = f.read(struct_len)
             if not data: break
             s = struct_unpack(data)
-            results.append(Order(s[0], s[1], DirectionType([2]), s[3], s[4], OrderType(s[5])))
+            results.append(Order(s[0], s[1], s[2], s[3], s[4], s[5]))
     return results
 
 class data_read:
@@ -95,17 +97,14 @@ class data_read:
             curr_order_page = np.transpose([curr_order_id_page, curr_direction_page, curr_price_page, curr_volumn_page, curr_type_page])
             # sort curr_order_page by order_id
             curr_order_page = curr_order_page[curr_order_page[:, 0].argsort()] 
-            
             self.all_page.append(curr_order_page)
             #temp_file_path = self.data_file_path + '/team-3/' + 'temp' + str(curr_stock_id + 1)
             temp_file_path = '/data/team-3/' + 'temp' + str(curr_stock_id + 1)
-
-            #res = curr_order_page.tolist()
-            #print(len(res[0]))
-
+            res = curr_order_page.tolist()
+            print(len(res[0]))
             with open(temp_file_path, 'wb') as f:
-                f.write(b''.join(map(lambda x: struct.pack("=iiidii", int(curr_stock_id), int(x[0]), int(x[1]), x[2], int(x[3]), int(x[4])),curr_order_page)))
-
+                f.write(b''.join(map(lambda x: struct.pack("=iiidii", int(curr_stock_id), int(x[0]), int(x[1]), x[2], int(x[3]), int(x[4])), res)))
+'''
 async def order_is_need_to_tans(order_id, stock_id, hook_mtx, hook_position, trade_list):
     """
     use to determine whther this order need to send
@@ -159,17 +158,15 @@ async def order_is_need_to_tans(order_id, stock_id, hook_mtx, hook_position, tra
             return True               
 
 async def communicate_single_stock_with_server(i, data_file_path, send_queue, hook_mtx, hook_position, trade_lists):
-
     temp_file_path = '/data/team-3/' + 'temp' + str(i + 1)
     #temp_file_path = data_file_path + '/' + 'temp' + str(i + 1)
-
     order_list = read_binary_order_temp_file(temp_file_path)
     logger.info("start put orderid of stock %d in queue" % (i + 1))
         
     for index in range(len(order_list)):
         order_id = order_list[index].order_id
         price = order_list[index].price
-        direction = DirectionType(order_list[index].direction)
+        direction = order_list[index].direction
         volume = order_list[index].volume
         type = OrderType(order_list[i].type)        
         if await order_is_need_to_tans(order_id, i, hook_mtx, hook_position, trade_lists):
@@ -217,7 +214,7 @@ async def put_in_queue(data_file_path, send_queue, hook_mtx, hook_position, trad
     ret = await asyncio.gather(stock_1_task, stock_2_task, stock_3_task, stock_4_task, stock_5_task, stock_6_task, stock_7_task, stock_8_task, stock_9_task, stock_10_task)                      
 
 
-
+'''
 #####################################################################################################################
 
 def read_data_from_file(data_file_path, client_id):
@@ -225,7 +222,53 @@ def read_data_from_file(data_file_path, client_id):
     logger.info("READ DATA PROCESS: READ PATH %s CLIENT_ID %d " % (data_file_path, client_id))
     order_data = data_read(data_file_path, client_id)
     order_data.data_read()
-  
+
+def order_is_need_to_trans(send_queue, order_id, stock_id, hook_mtx, hook_position, trade_lists,Order_Data):
+    if order_id < hook_mtx[stock_id][hook_position[stock_id]][0]:
+        return False
+    elif order_id == hook_mtx[stock_id][hook_position[stock_id]][0]:
+        target_stk_code = hook_mtx[stock_id][hook_position[stock_id]][1]
+        target_trade_idx = hook_mtx[stock_id][hook_position[stock_id]][2]
+        arg = hook_mtx[stock_id][hook_position[stock_id]][3]
+        while True:
+            if len(trade_lists[target_stk_code - 1]) < target_trade_idx:
+                logger.debug("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook")
+                return True
+            else:
+                break
+        if trade_lists[target_stk_code - 1][target_trade_idx - 1] < arg:
+            hook_position[stock_id] += 1
+            send_queue.put(Order_Data)
+            return False
+        else:
+            hook_position[stock_id] += 1
+            send_queue.put(Order(Order_Data.str_code, Order_Data.order_id, Order_Data.direction, 0, 0, Order_Data.type))
+            return False
+    else:
+        while(hook_mtx[stock_id][hook_position[stock_id]][0] > order_id):
+            hook_position[stock_id] += 1
+        if order_id == hook_mtx[stock_id][hook_position[stock_id]][0]:
+            target_stk_code = hook_mtx[stock_id][hook_position[stock_id]][1]
+            target_trade_idx = hook_mtx[stock_id][hook_position[stock_id]][2]
+            arg = hook_mtx[stock_id][hook_position[stock_id]][3]
+            while True:
+                if len(trade_lists[target_stk_code - 1]) < target_trade_idx:
+                    logger.debug("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook" %(target_stk_code, stock_id, order_id))
+                    logger.debug("stock %d wait 1 seconds" % (stock_id))
+                    return True
+                else:
+                    break
+            if trade_lists[target_stk_code - 1][target_trade_idx - 1] < arg:
+                hook_position[stock_id] += 1
+                send_queue.put(Order_Data)
+                return False
+            else:
+                hook_position[stock_id] += 1
+                send_queue.put(Order(Order_Data.str_code, Order_Data.order_id, Order_Data.direction, 0, 0, Order_Data.type))
+                return False
+        else:
+            return True
+
 def put_data_in_queue(send_queue, data_file_path, client_id, trade_lists):
     logger.info("COMMUNICATE PROCESS: CLIENT_ID %d " % (client_id))
     # append squares of mylist to queue
@@ -237,16 +280,43 @@ def put_data_in_queue(send_queue, data_file_path, client_id, trade_lists):
     '''
     hook_mtx = h5py.File(data_file_path + '/' + "hook.h5", 'r')['hook']
     hook_position = [0] * 10
-    asyncio.run(put_in_queue(data_file_path, send_queue, hook_mtx, hook_position, trade_lists))
-   
+    order_lists = []
+    curr_order_position = [0] * 10
+    #asyncio.run(put_in_queue(data_file_path, send_queue, hook_mtx, hook_position, trade_lists))
+    stock_id = 0
+    
+    while True:
+        stock_id = stock_id % 10
+        temp_file_path = '/data/team-3/' + 'temp' + str(stock_id + 1)
+        order_list = read_binary_order_temp_file(temp_file_path)
+        logger.info("start put orderid of stock %d in queue" % (stock_id + 1))
+        temp_order_position = curr_order_position[stock_id]
+        while True:        
+            order_id = order_list[temp_order_position].order_id
+            price = order_list[temp_order_position].price
+            direction = order_list[temp_order_position].direction
+            volume = order_list[temp_order_position].volume
+            type = OrderType(order_list[temp_order_position].type)  
+            if order_is_need_to_trans(send_queue, order_id, stock_id, hook_mtx, hook_position, trade_lists, curr_order_position[stock_id]):
+                stock_id += 1
+                break
+            else:
+                send_queue.put(order_lists[temp_order_position])
+                temp_order_position += 1
+                curr_order_position[stock_id] = temp_order_position
+            if temp_order_position == len(order_lists):
+                curr_order_position = -1
+            if temp_order_position == -1:
+                break
+        if(sum(curr_order_position)) == -10:
+            break
+
 
 def communicate_with_server(send_queue, receive_queue, client_id, data_file_path, trade_lists):
     """
     function to square a given list
     """
-
     run_client(receive_queue,send_queue)
-
 
 def write_result_to_file(receive_queue, res_file_path, client_id, trade_lists):
     """
@@ -260,8 +330,9 @@ def write_result_to_file(receive_queue, res_file_path, client_id, trade_lists):
         else:
             stock_id = Trade_Item.stk_code
             volume = Trade_Item.volume
-            trade_lists[stock_id - 1].append(volume) # take the  row
-
+            row = trade_lists[stock_id - 1] # take the  row
+            row.append(volume) # change it
+            trade_lists[stock_id - 1] = row
             #trade_lists[stock_id - 1].append(volume)
             res_path = res_file_path + '/' + 'trade' + str(stock_id)
             with open(res_path, 'wb') as f:
@@ -284,10 +355,11 @@ if __name__ == "__main__":
 
     manager = multiprocessing.Manager()
     # a simple implemment to achieve result
-    trade_lists = []
+    order_id_position = [0] * 10
+    trade_lists = manager.list()
     for i in range(10):
-        trade_lists.append(manager.list())
-   
+        trade_lists.append([])
+
 
     logger.info("===============data read finished==============")
     logger.info("==========================client server %s begin===========================" % args.client_id)
@@ -295,6 +367,7 @@ if __name__ == "__main__":
     # creating multiprocessing Queue
     send_queue = multiprocessing.Queue()
     receive_queue = multiprocessing.Queue()
+
     # creating new processes
     process_list = []
     process_read_data_from_file = multiprocessing.Process(target=read_data_from_file, args=(args.filepath, int(args.client_id), ))
@@ -303,14 +376,14 @@ if __name__ == "__main__":
     process_write_result_to_file = multiprocessing.Process(target=write_result_to_file, args=(receive_queue,args.respath, int(args.client_id),trade_lists))
     
     process_read_data_from_file.start()
-    process_read_data_from_file.join()
+    #process_read_data_from_file.join()
     process_put_data_in_queue.start()
     #process_put_data_in_queue.join()
     process_communicate_with_server.start()
     #process_communicate_with_server.join()
     process_write_result_to_file.start()
     #process_write_result_to_file.join()
-
+    process_list.append(process_read_data_from_file)
     process_list.append(process_put_data_in_queue)
     process_list.append(process_communicate_with_server)
     process_list.append(process_write_result_to_file)

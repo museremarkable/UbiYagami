@@ -598,10 +598,10 @@ class MatchingEngine:
             return None, None
 
     def _get_multi_queue_feeds(self) -> Tuple[List[Trade], List[Quote]]:
-        feeds = ([], [])
+        feeds = [[], []]
         for q in self.multi_feed_queue:
             if not q.empty():
-                this_feed = self.feed_queue.get()
+                this_feed = q.get()
                 feeds[0] += this_feed[0]
                 feeds[1] += this_feed[1]
         return feeds

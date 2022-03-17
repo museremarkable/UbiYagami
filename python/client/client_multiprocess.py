@@ -147,7 +147,7 @@ def write_data2file(args):
     curr_order_page = args[1]
     temp_file_path = '/data/team-3/' + 'temp' + str(curr_stock_id + 1)
     #temp_file_path = 'F:/temp'+ str(curr_stock_id + 1)
-    with open(temp_file_path, 'wb') as f:
+    with open(temp_file_path, 'wb+') as f:
         f.write(b''.join(map(lambda x: struct.pack("=iiidii", int(curr_stock_id), int(x[0]), int(x[1]), x[2], int(x[3]), int(x[4])), curr_order_page)))
         f.close()
     logger.info(str(os.getpid())+ '写入的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
@@ -284,7 +284,7 @@ def order_is_need_to_trans(send_queue, order_id, stock_id, hook_mtx, hook_positi
         while True:
             #如果trade——list长度不够
             if len(trade_lists[target_stk_code - 1]) < target_trade_idx:
-                logger.debug("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook")
+                #logger.debug("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook")
                 return True
             #trade_list长度够
             else:
@@ -292,6 +292,7 @@ def order_is_need_to_trans(send_queue, order_id, stock_id, hook_mtx, hook_positi
         #此特殊id符合发送条件
         if trade_lists[target_stk_code - 1][target_trade_idx - 1] < arg:
             hook_position[stock_id] += 1
+            logger.debug("put order %d of stock %d in queue" % (order_id, stock_id))
             send_queue.put(Order_Data)
             #发送后继续发送该股票
             return False
@@ -315,8 +316,8 @@ def order_is_need_to_trans(send_queue, order_id, stock_id, hook_mtx, hook_positi
             while True:
                 #开始判断
                 if len(trade_lists[target_stk_code - 1]) < target_trade_idx:
-                    logger.debug("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook" %(target_stk_code, stock_id, order_id))
-                    logger.debug("stock %d wait 1 seconds" % (stock_id))
+                    #logger.debug("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook" %(target_stk_code, stock_id, order_id))
+                    #logger.debug("stock %d wait 1 seconds" % (stock_id))
                     return True
                 #tradelist符合条件
                 else:
@@ -350,16 +351,16 @@ def put_data_in_queue(send_queue, data_file_path, client_id, trade_lists):
     curr_order_position = [0] * 10
     #asyncio.run(put_in_queue(data_file_path, send_queue, hook_mtx, hook_position, trade_lists))
     stock_id = 0
-    
+    cnt = 0
     while True:
         #轮询10个股票
         stock_id = stock_id % 10
         temp_file_path = '/data/team-3/' + 'temp' + str(stock_id + 1)
         #temp_file_path = 'F:/temp'+ str(stock_id + 1)
-        logger.info(temp_file_path)
+        #logger.info(temp_file_path)
         order_list = read_binary_order_temp_file(temp_file_path)
         
-        logger.info("start put orderid of stock %d in queue" % (stock_id + 1))
+        #logger.info("start put orderid of stock %d in queue" % (stock_id + 1))
         temp_order_position = curr_order_position[stock_id]
         while True:
             #发送一个stock，只要可以发就一直发        
@@ -378,6 +379,11 @@ def put_data_in_queue(send_queue, data_file_path, client_id, trade_lists):
                 send_queue.put(order_list[temp_order_position])
                 temp_order_position += 1
                 curr_order_position[stock_id] = temp_order_position
+                cnt += 1
+                if cnt %100 == 0:
+                    stock_id += 1
+                    cnt = 0
+                    break
             #到达trade_list末尾，置-1
             if temp_order_position == len(order_list):
                 curr_order_position[stock_id] = -1

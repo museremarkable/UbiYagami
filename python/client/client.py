@@ -1,13 +1,10 @@
 import os
 import sys
-
 path = os.path.join(os.path.dirname(__file__), os.pardir)
 sys.path.append(path)
-from asyncore import poll
-from cProfile import run
-#import imp
-import tarfile
-#from python.connection.connection import ClientTCP
+from argparse import ArgumentParser
+import multiprocessing
+
 import h5py
 from enum import IntEnum
 from connection.order_type import OrderTick
@@ -22,7 +19,7 @@ import time
 from utils.wirte_logger import get_logger
 import asyncio
 from asyncio import AbstractEventLoop, StreamReader, StreamWriter
-
+from connection.tcp_client import ClientTCP
 import numpy as np
 from data_type import OrderType, DirectionType, OperationType, Order, Quote, Trade
 import logging
@@ -32,113 +29,119 @@ logging.basicConfig(level=logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s  %(name)s  %(levelname)s: %(message)s')
 logger.addHandler(handler)
 handler.setFormatter(formatter)
-# logger.debug('This is a sample debug message')
-# logger.info('This is a sample info message')
-# logger.warning('This is a sample warning message')
-# logger.error('This is a sample error message')
-# logger.critical('This is a sample critical message')
-# logger.error('Our First Log Message')
+import datetime
+import contextlib
+from functools import partial
+import psutil
+import pysnooper
+import gc
+@contextlib.contextmanager
+def record_time():
+    try:
+        start_time = datetime.datetime.now()
+        logger.info('start: {}'.format(start_time))
+        yield
+    finally:
+        logger.info('this code text need time: {}'.format(datetime.datetime.now() - start_time))
 
 
+def read_binary_order_temp_file(data_file_path):
+    struct_fmt = '=iiidii' # 
+    struct_len = struct.calcsize(struct_fmt)
+    struct_unpack = struct.Struct(struct_fmt).unpack_from
+    results = []
+    with open(data_file_path, "rb") as f:
+        while True:
+            data = f.read(struct_len)
+            if not data: break
+            s = struct_unpack(data)
+            results.append(Order(s[0], s[1], DirectionType(s[2]), s[3], s[4], OrderType(s[5])))
+    return results
+
+class data_read:
+    def __init__(self, data_file_path, client_id):
+
+        self.trade_list = [[]] * 10
+        # client_id used to identify different client server
+        self.client_id = client_id
+        self.all_page = []
+        self.data_file_path = data_file_path
+
+        
+    # process all data, alter that then trans these data
+
+    def data_read_mp(self, curr_stock_id):
+        order_id_path = self.data_file_path +'/'+ "order_id" + str(self.client_id) + ".h5"
+        direction_path = self.data_file_path + '/'+ "direction" + str(self.client_id) + ".h5"
+        price_path = self.data_file_path + '/'+ "price" + str(self.client_id) + ".h5"
+        volume_path = self.data_file_path + '/'+ "volume" + str(self.client_id) + ".h5"
+        type_path = self.data_file_path + '/'+ "type" + str(self.client_id) + ".h5"
+
+        order_id_mtx = h5py.File(order_id_path, 'r')['order_id']
+        direction_mtx = h5py.File(direction_path, 'r')['direction']
+        price_mtx = h5py.File(price_path, 'r')['price']
+        volume_mtx = h5py.File(volume_path, 'r')['volume']
+        type_mtx = h5py.File(type_path, 'r')['type']
+        logger.info('读文件进程的内存使用：',psutil.Process(os.getpid()).memory_info().rss)
+        logger.info('读文件进程的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
+
+        data_page_number = order_id_mtx.shape[0]
+        data_row_number = order_id_mtx.shape[1]
+        data_column_number = order_id_mtx.shape[2]        
+        per_stock_page_number = data_page_number // 10
+        logger.info("page number is %d" % data_page_number)
+        logger.info("data row number is%d" % data_row_number)
+        logger.info("data column number is %d" % data_column_number)
+        logger.info("per stock has %d page" % per_stock_page_number)
+        #data transform
+        #this implementation only works for small data(100x10x10 0.06 per stock 100x100x100 35s per stock, 100x1000x1000 1240s per stock, it's unaccecptable)
+        logger.info("begin to process data")
+        #print(curr_stock_id)
+        logger.info("proceesing stock %d" % (curr_stock_id + 1))
+        indexes = [i * 10 + curr_stock_id for i in range(0, per_stock_page_number)]
+        curr_order_id_page = order_id_mtx[indexes,].reshape(-1).astype(np.int32)
+        curr_direction_page = direction_mtx[indexes,].reshape(-1).astype(np.int32)
+        curr_price_page = price_mtx[indexes,].reshape(-1).astype(np.int32)
+        curr_volumn_page = volume_mtx[indexes,].reshape(-1).astype(np.int32)
+        curr_type_page = type_mtx[indexes,].reshape(-1).astype(np.int32)
+        curr_order_page = np.transpose([curr_order_id_page, curr_direction_page, curr_price_page, curr_volumn_page, curr_type_page])
+        del curr_order_id_page
+        del curr_direction_page
+        del curr_price_page
+        del curr_volumn_page
+        del curr_type_page
+        gc.collect()
+        logger.info('排序前的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
+        curr_order_page = curr_order_page[curr_order_page[:, 0].argsort()] 
+        #self.all_page.append(curr_order_page)
+        logger.info('排序后的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
+
+        #temp_file_path = self.data_file_path + '/team-3/' + 'temp' + str(curr_stock_id + 1)
+        
+        logger.info(str(os.getpid())+'to list前的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
+        #res = curr_order_page.tolist()
+        logger.info('to_list后的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
+
+        return (curr_stock_id, curr_order_page)
+    
+def print_error(value):
+    logger.info("Error reason: ", value)
+
+def write_data2file(args):
+    curr_stock_id = args[0]
+    curr_order_page = args[1]
+    temp_file_path = '/data/team-3/' + 'temp' + str(curr_stock_id + 1)
+    with open(temp_file_path, 'wb') as f:
+        f.write(b''.join(map(lambda x: struct.pack("=iiidii", int(curr_stock_id), int(x[0]), int(x[1]), x[2], int(x[3]), int(x[4])), curr_order_page)))
+        f.close()
+    logger.info(str(os.getpid())+ '写入的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
+    del curr_order_page
+
+def make_batches(size, batch_size):
+    nb_batch = int(np.ceil(size / float(batch_size)))
+    return [(i * batch_size, min(size, (i + 1) * batch_size)) for i in range(0, nb_batch)]
 
 
-
-#from python.server.server import BuySide, OrderType
-#from server.server import Order
-
-def is_in_trading_day_session_trading_hour(now: pd.Timestamp = None):
-    if now is None:
-        now = pd.Timestamp.now(tz='Asia/Shanghai')
-    now_ = now.strftime("%H:%M:%S,%f")
-    s1 = "09:00:00"
-    e1 = "10:15:00"
-    s2 = "10:30:00"
-    e2 = "11:30:00"
-    s3 = "13:30:00"
-    e3 = "15:00:00"
-    rslt_ix = sorted([now_, s1, e1, s2, e2, s3, e3]).index(now_)
-    if rslt_ix % 2 == 0:
-        return False
-    else:
-        return True
-
-
-class Operation(IntEnum):
-    HEARTBEAT = 0
-    KEEPALIVE = 1
-    KEEPALIVE_FAIL = 2
-    INFO = 3
-
-
-class OrderStreamClient:
-    BUF_SIZE = 2 << 20
-    #order_tick_shema = OrderTick()
-    # todo:完善
-    # todo： 做好解析之后还回去。
-
-    def __init__(self, ip: str, port: int):
-        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._socket.settimeout(3)
-        self._socket.connect((ip, port))
-        self.data_queue = PollableQueue()
-        self._is_running = True
-        # todo: write a function to read data file
-        self.log = get_logger(__name__, filename='streaming_client')
-        # write a log ?
-        # self.log
-
-    def close(self):
-        self._is_running = False
-
-    def start_streaming(self):
-        incomplete_frame = b''
-        while self._is_running:
-            try:
-                data = incomplete_frame + self._socket.recv(self.BUF_SIZE)
-            except socket.timeout:
-                if is_in_trading_day_session_trading_hour():
-                    self.log.debug('Sending Heart Beat...Plz Check Streaming Data Availability!')
-                self.heartbeat()
-                continue
-            except BaseException as e:
-                self.log.error(f'got error: {e}')
-                time.sleep(1)  # 避免不断报错
-                continue
-
-        frames = data.split(b'\r\n')
-        for frame in frames:
-            if frame:  # 不考虑 b'' 的情况
-                if frame.endswith(b'}') and len(frame) > 8:
-                    try:
-                        payload = frame[8:]
-                        # self.data_queue.put(order_tick)
-                    except BaseException as e:
-                        self.log.error(f'{e}, received {frame}')
-                    incomplete_frame = b''
-                else:
-                    self.log.debug(f'received incomplete frame: {frame}')
-                    incomplete_frame = frame
-
-        self.log.warning('socket is closing!')
-        self._socket.close()
-        self.log.warning('socket closed')
-
-
-    def keep_alive(self):
-        self._socket.send()
-        # todo: 活的时候要发什么
-
-    def keep_alive_fail(self):
-        self._socket.send()
-        # todo:死了发什么
-
-    def heartbeat(self):
-        self._socket.send(self._generate_msg(operation=Operation.HEARTBEAT, body={'time': int(time.time()*1000)}))
-        self.log.info()
-
-    @staticmethod
-    def _generate_msg(operation: Operation, body: dict) -> bytes:
-        return struct.pack('!ii', 1, operation) + json.dumps(body).encode() + b'\r\n'
 
 
 
@@ -153,13 +156,14 @@ class Client:
         self.trade_list = [[]] * 10
         # client_id used to identify different client server
         self.client_id = client_id
-        self.all_page = []
+        #self.all_page = []
         self.data_file_path = data_file_path
         self.res_file_path = res_file_path
         self.hook_mtx = h5py.File(data_file_path + '/' + "hook.h5", 'r')['hook']
         self.hook_position = [0] * 10
         
     # process all data, alter that then trans these data
+    '''
     def data_read(self):
         """
         read all data from file
@@ -218,79 +222,63 @@ class Client:
             curr_order_page = np.transpose([curr_order_id_page, curr_direction_page, curr_price_page, curr_volumn_page, curr_type_page])
             # sort curr_order_page by order_id
             curr_order_page = curr_order_page[curr_order_page[:, 0].argsort()] 
-            self.all_page.append(curr_order_page)
-            
+            #self.all_page.append(curr_order_page)
+            #temp_file_path = self.data_file_path + '/' + 'temp' + str(curr_stock_id + 1)
+            temp_file_path = '/data/team-3/' + 'temp' + str(curr_stock_id + 1)
+            with open(temp_file_path, 'wb') as f:
+                f.write(b''.join(map(lambda x: struct.pack("=iiidii", int(curr_stock_id + 1), int(x[0]), int(x[1]), x[2], int(x[3]), int(x[4])),curr_order_page)))
             # asynchronous send data
             #await self.communicate_with_server(curr_order_page, hook_mtx, curr_stock_id, res_file_path)
-    async def communicate_with_server(self):
+    '''
+    async def communicate_with_server(self, send_queue, receive_queue):
         """
         communicate all data with server
         why use async not multiprocess
         """
-        send_queue = asyncio.Queue(100)
-        reveive_queue = asyncio.Queue(100)
-        send_queue.put
-        stock_1_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(0, send_queue))
-        stock_2_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(1, send_queue))
-        stock_3_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(2, send_queue))
-        stock_4_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(3, send_queue))        
-        stock_5_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(4, send_queue))
-        stock_6_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(5, send_queue))
-        stock_7_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(6, send_queue))
-        stock_8_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(7, send_queue))
-        stock_9_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(8, send_queue))
-        stock_10_task = asyncio.create_task(
-            self.communicate_single_stock_with_server(9, send_queue))
-        receive_task = asyncio.create_task(
-            self.read_trade_data_from_queue(reveive_queue)
-            )
-        ret = await asyncio.gather(stock_1_task, stock_2_task, stock_3_task, stock_4_task, stock_5_task, stock_6_task, stock_7_task, stock_8_task, stock_9_task, stock_10_task, receive_task)            
         
-    async def communicate_single_stock_with_server(self, stock_id, send_queue):
+       
+             
+        
+    async def put_single_stock_to_server(self, stock_id, send_queue):
         """
         put data in a queue
         """
         logger.info("start put orderid of stock %d in queue" % (stock_id + 1))
+        temp_file_path = '/data/team-3/' + 'temp' + str(stock_id + 1)
         
-        for i in range(len(self.all_page[stock_id])):
-            if await self.order_is_need_to_tans(i, stock_id):
-                direction = DirectionType(self.all_page[stock_id][i][1])
-                price = self.all_page[stock_id][i][2]
-                volume = self.all_page[stock_id][i][3]
-                type = OrderType(self.all_page[stock_id][i][4])
-                tempdata = Order(stock_id, int(self.all_page[stock_id][i][0]), direction, price, volume, type)
-                    #here need to add some to avoid 
-                    #if corresponding trade_list number is 
-                if i % 20 == 1:
+        #temp_file_path = self.data_file_path + '/' + 'temp' + str(stock_id + 1)
+        order_list = read_binary_order_temp_file(temp_file_path)
+        for index in range(len(order_list)):
+            order_id = order_list[index].order_id
+            price = order_list[index].price
+            direction = DirectionType(order_list[index].direction)
+            volume = order_list[index].volume
+            type = OrderType(order_list[stock_id].type) 
+            if await self.order_is_need_to_tans(order_id, stock_id):              
+                if index % 20 == 1:
                 # a stock hook 1000 6 230 5
                     await asyncio.sleep(1)
-                await send_queue.put(tempdata)
-                logger.debug("put order_id %d of stock %d in send_queue" % (self.all_page[stock_id][i][0], stock_id))
+                await send_queue.put(order_list[index])
+                #
+                # 
+                
+                
+                logger.debug(order_list[index])
+                logger.debug("put order_id %d of stock %d in send_queue(index is %d)" % (order_id, stock_id + 1, index))
                 #!!!!! only for test
                 #await send_queue.get()
                 #await asyncio.sleep(1)
             
-            else:
-                direction = DirectionType(self.all_page[stock_id][i][1])
-                type = OrderType(self.all_page[stock_id][i][4])
-                tempdata = Order(stock_id, int(self.all_page[stock_id][i][0]), direction, 0, 0, type)
-                await send_queue.put(tempdata)
-                logger.debug("put no nned to use order_id %d of stock %d in send_queue" % (self.all_page[stock_id][i][0], stock_id))
+            else:             
+                tempdata = Order(stock_id + 1, int(order_id), direction, 0, 0, type)
+                send_queue.put(tempdata)
+                logger.debug("put no nned to use order_id %d of stock %d in send_queue" % (order_id, stock_id))
                 #!!!!! only for test
                 #await send_queue.get()
                 #await asyncio.sleep(1)
             #only trans order_id and stock_id, other parameter is 0
 
-   
+    
 
 
     async def order_is_need_to_tans(self, order_id, stock_id):
@@ -309,21 +297,27 @@ class Client:
             arg = self.hook_mtx[stock_id][self.hook_position[stock_id]][3]
             while True:
                 if len(self.trade_list[stock_id]) < target_trade_idx:
-                    logger.debug("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook")
-                    logger.debug("stock %d wait 1 seconds")
+                    logger.debug("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook" % ( target_stk_code,stock_id, order_id))
+                    logger.debug("current stock %d 's trade_list length is %d" % (target_stk_code, len(self.trade_list[stock_id])))
                     await asyncio.sleep(1)
                 else:
-                    break
-            
-            if self.trade_list[target_stk_code][target_trade_idx - 1] < arg:
-                self.hook_position[stock_id] += 1
-                return True
-            else:
-                self.hook_position[stock_id] += 1
-                return False
+                    if self.trade_list[target_stk_code][target_trade_idx - 1] < arg:
+                        self.hook_position[stock_id] += 1
+                        return True
+                    else:
+                        self.hook_position[stock_id] += 1
+                        return False
+
+            # if self.trade_list[target_stk_code][target_trade_idx - 1] < arg:
+            #     self.hook_position[stock_id] += 1
+            #     return True
+            # else:
+            #     self.hook_position[stock_id] += 1
+            #     return False
         else:
             #if order id is bigger than the current hook order_id, we need to add hook position to make it <= hook order id
-            while(self.hook_mtx[stock_id][self.hook_position[stock_id]][0] > order_id):
+            while(self.hook_mtx[stock_id][self.hook_position[stock_id]][0] < order_id):
+                logger.debug("order_id %d of stock %d is larger than corresponding hook position %d" %(order_id, stock_id, self.hook_mtx[stock_id][self.hook_position[stock_id]][0]))
                 self.hook_position[stock_id] += 1
             if order_id == self.hook_mtx[stock_id][self.hook_position[stock_id]][0]:
                 target_stk_code = self.hook_mtx[stock_id][self.hook_position[stock_id]][1]
@@ -332,7 +326,7 @@ class Client:
                 while True:
                     if len(self.trade_list[stock_id]) < target_trade_idx:
                         logger.debug("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook" %(target_stk_code, stock_id, order_id))
-                        logger.debug("stock %d wait 1 seconds" % (stock_id))
+                        logger.debug("current stock %d 's trade_list length is %d" % (target_stk_code, len(self.trade_list[stock_id])))
                         await asyncio.sleep(1)
                     else:
                         break
@@ -343,30 +337,96 @@ class Client:
                     self.hook_position[stock_id] += 1
                     return False
             else:
-                return True               
+                return True
+    async def communicate_to_server(self, send_queue, receive_queue):
+        #loop = asyncio.get_event_loop()
+        Client_run = ClientTCP(receive_queue, send_queue)
+        stock_1_task = asyncio.create_task(
+            self.put_single_stock_to_server(0, send_queue))
+        stock_2_task = asyncio.create_task(
+            self.put_single_stock_to_server(1, send_queue))
+        stock_3_task = asyncio.create_task(
+            self.put_single_stock_to_server(2, send_queue))
+        stock_4_task = asyncio.create_task(
+            self.put_single_stock_to_server(3, send_queue))        
+        stock_5_task = asyncio.create_task(
+            self.put_single_stock_to_server(4, send_queue))
+        stock_6_task = asyncio.create_task(
+            self.put_single_stock_to_server(5, send_queue))
+        stock_7_task = asyncio.create_task(
+            self.put_single_stock_to_server(6, send_queue))
+        stock_8_task = asyncio.create_task(
+            self.put_single_stock_to_server(7, send_queue))
+        stock_9_task = asyncio.create_task(
+            self.put_single_stock_to_server(8, send_queue))
+        stock_10_task = asyncio.create_task(
+            self.put_single_stock_to_server(9, send_queue))
+        receive_task = asyncio.create_task(
+            self.read_trade_data_from_queue(receive_queue))
+        communicate_task = asyncio.create_task(
+            Client_run.run_main())
+        ret = await asyncio.gather(stock_1_task, stock_2_task, stock_3_task, stock_4_task, stock_5_task, stock_6_task, stock_7_task, stock_8_task, stock_9_task, stock_10_task, receive_task, communicate_task)       
+        logger.info("in the communicate server", send_queue)
+        
+        #loop.run_until_complete(Client_run.run_main())
+        #loop.close()
+        
     async def read_trade_data_from_queue(self, receive_queue):
         #read data from trade data
         while True:
             #!!!!! only for test
             #await receive_queue.put(Trade(1, 1, 1, 1, 1))
             #await asyncio.sleep(1)
-            logger.info("get trade result of stock %d while bid id is %d" % (1, 1))
-            trade_item = await receive_queue.get()
-            if trade_item is None:
+            if receive_queue.empty():
                 await asyncio.sleep(1)
             else:
-                #self.trade_list[trade_item.stock_id].append(trade_item) 
-                self.trade_list[0].append(trade_item)         
+                trade_item = receive_queue.get()
+        
+                        #self.trade_list[trade_item.stock_id].append(trade_item)
+                stock_id = trade_item.stk_code
+                volume = trade_item.volume 
+                logger.info("get trade result of stock %d while volume is %d" % (stock_id, trade_item))
+                self.trade_list[stock_id].append(volume)
+                res_path = self.res_file_path + '/' + 'trade' + str(stock_id)
+                with open(res_path, 'wb') as f:
+                    f.write(b''.join(trade_item.to_bytes()))
             #!!!!!! just for test!!!!
             
 
-    def store_all_trade(self, stock_id):
-        res_file_path = self.res_file_path + '/' + 'trade' + str(stock_id)
-        with open(res_file_path, 'wb') as f:
-            f.write(b''.join(map(lambda x: x.to_bytes(), self.trade_list[stock_id])))
+    # def store_all_trade(self, stock_id):
+    #     res_file_path = self.res_file_path + '/' + 'trade' + str(stock_id)
+    #     with open(res_file_path, 'wb') as f:
+    #         f.write(b''.join(map(lambda x: x.to_bytes(), self.trade_list[stock_id])))
 
-
-asyncio.run(Trader_Server.communicate_with_server())
+if __name__ == "__main__":
+    # input list
+    parser = ArgumentParser()
+    parser.add_argument("-f", "--filepath",  help="data file folder path")
+    parser.add_argument("-r", "--respath",  help="result folder path")
+    parser.add_argument("-c", "--client_id",  help="client_id, which is 1 or 2")
+    args = parser.parse_args()    
+    logger.info("===============begin to read data==============")
+    send_queue = asyncio.Queue()
+    receive_queue = asyncio.Queue()
+    Trade_Server = Client(int(args.client_id), args.filepath, args.respath)
+    data_file_path = args.filepath
+    with record_time():
+        order_data = data_read(data_file_path, 1)
+        batch_size = 4
+        query_list = make_batches(10,batch_size)
+        # order_data.data_read()
+        # order_id_mtx,direction_mtx, price_mtx, volume_mtx, type_mtx, per_stock_page_number = order_data.data_read()
+        # final_func = partial(mpread,order_id_mtx=order_id_mtx,direction_mtx=direction_mtx, price_mtx=price_mtx, volume_mtx=volume_mtx, type_mtx=type_mtx, per_stock_page_number=per_stock_page_number)
+        # order_data.data_read_mp(0)
+        for start, end in query_list:
+            pool = multiprocessing.Pool(batch_size)
+            for curr_stock_id in range(start,end):
+                pool.apply_async(order_data.data_read_mp, args=(curr_stock_id, ),callback=write_data2file, error_callback=print_error)
+            pool.close()
+            pool.join()
+    #Trade_Server.data_read()
+    #asyncio.get_event_loop().run_until_complete(Trade_Server.communicate_with_server(send_queue, receive_queue))
+    asyncio.run(Trade_Server.communicate_with_server(send_queue, receive_queue))
 #todo暂时把接受数据与写文件解耦，后续tcp部分完成后和tcp部分写到一起
-for i in range(10):
-    Trader_Server.store_all_trade(i + 1)
+    #for i in range(10):
+    #   Trader_Server.store_all_trade(i + 1)

@@ -1,16 +1,16 @@
 import enum
 import struct
-import json
 
 
-class DirectionType(enum.IntEnum):
+class DirectionType(enum.Enum):
     """
     the trading direction of the order: buy side / sell side;
     """
     BUY = 1
     SELL = -1
 
-class OrderType(enum.IntEnum):
+
+class OrderType(enum.Enum):
     """
     Totally 6 types of order;
     """
@@ -26,6 +26,8 @@ class Order:
     """
     Order type used for transferring;
     """
+
+    __slots__ = ['stk_code','order_id','direction','price','volume','type']
     def __init__(self, stk_code, order_id, direction, price, volume, type):
         self.stk_code = stk_code
         self.order_id = order_id
@@ -45,22 +47,15 @@ class Order:
         convert into MinOrder type;
         """
         return MinOrder(self.order_id, self.volume)
+    
 
-    def to_dict(self):
-        return {
-                'o': int(self.order_id),
-                's': int(self.stk_code),
-                'd': int(self.direction),
-                't': int(self.type),
-                'p': self.price,
-                'v': int(self.volume)
-            }
-        
+
 
 class SubOrder:
     """
     A Order type used inside the order book operations;
     """
+    __slots__ = ['order_id','direction','price','volume']
     def __init__(self, order_id, direction, price, volume):
         self.order_id = order_id
         self.direction = direction
@@ -78,6 +73,7 @@ class MinOrder:
     """
     A order type that is stored in the order link, only contents minimum order info taking up less memory.
     """
+    __slots__ = ['order_id','volume']
     def __init__(self, order_id, volume):
         self.order_id = order_id
         self.volume = volume
@@ -95,17 +91,8 @@ class Quote:
         self.volume = volume
         self.operation = operation
 
-    def to_dict(self):
-        return {
-            's': self.stk_code,
-            'o': self.order_id,
-            'p': self.price,
-            'v': self.volume,
-            'O': self.operation
-        }
 
-
-class OperationType(enum.IntEnum):
+class OperationType(enum.Enum):
     """
     A type used as update instructions to reconstruct the local order book;
     """
@@ -130,12 +117,3 @@ class Trade:
 
     def to_bytes(self):
         return struct.pack("=iiidi", self.stk_code, self.bid_id, self.ask_id, self.price, self.volume)
-
-    def to_dict(self):
-        return {
-            's': self.stk_code,
-            'b': self.bid_id,
-            'a': self.ask_id,
-            'p': self.price,
-            'v': self.volume
-        }

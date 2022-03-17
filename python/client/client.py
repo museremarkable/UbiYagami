@@ -82,8 +82,8 @@ class data_read:
         price_mtx = h5py.File(price_path, 'r')['price']
         volume_mtx = h5py.File(volume_path, 'r')['volume']
         type_mtx = h5py.File(type_path, 'r')['type']
-        logger.info('读文件进程的内存使用：',psutil.Process(os.getpid()).memory_info().rss)
-        logger.info('读文件进程的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
+        #logger.info("读文件进程的内存使用：" , psutil.Process(os.getpid()).memory_info().rss)
+        #logger.info("读文件进程的内存使用：%.4f GB" % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
 
         data_page_number = order_id_mtx.shape[0]
         data_row_number = order_id_mtx.shape[1]
@@ -230,7 +230,7 @@ class Client:
             # asynchronous send data
             #await self.communicate_with_server(curr_order_page, hook_mtx, curr_stock_id, res_file_path)
     '''
-    async def communicate_with_server(self, send_queue, receive_queue):
+    #async def communicate_with_server(self, send_queue, receive_queue):
         """
         communicate all data with server
         why use async not multiprocess
@@ -397,6 +397,7 @@ class Client:
     #     res_file_path = self.res_file_path + '/' + 'trade' + str(stock_id)
     #     with open(res_file_path, 'wb') as f:
     #         f.write(b''.join(map(lambda x: x.to_bytes(), self.trade_list[stock_id])))
+async run
 
 if __name__ == "__main__":
     # input list
@@ -425,8 +426,13 @@ if __name__ == "__main__":
             pool.close()
             pool.join()
     #Trade_Server.data_read()
+    logger.info("begin to use asyncio")
     #asyncio.get_event_loop().run_until_complete(Trade_Server.communicate_with_server(send_queue, receive_queue))
-    asyncio.run(Trade_Server.communicate_with_server(send_queue, receive_queue))
+    asyncio.run(Trade_Server.communicate_to_server(send_queue, receive_queue))
+    #loop = asyncio.get_event_loop()
+    #Client_run = ClientTCP(order_queue, response_queue)
+    #loop.run_until_complete(Trade_Server.communicate_with_server(send_queue, receive_queue))
+    #loop.close()
 #todo暂时把接受数据与写文件解耦，后续tcp部分完成后和tcp部分写到一起
     #for i in range(10):
     #   Trader_Server.store_all_trade(i + 1)

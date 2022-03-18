@@ -17,21 +17,23 @@ import psutil
 import pysnooper
 import gc
 
-logger = logging.getLogger()
-handler = logging.FileHandler('./ClientLogFile.log')
-logging.basicConfig(level=logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s  %(name)s  %(levelname)s: %(message)s')
-logger.addHandler(handler)
-handler.setFormatter(formatter)
+logging.basicConfig(level=logging.DEBUG #设置日志输出格式
+                    ,filename="exchange_runtime.log" #log日志输出的文件位置和文件名
+                    ,filemode="w" #文件的写入格式，w为重新写入文件，默认是追加
+                    ,format="%(asctime)s - %(name)s - %(levelname)-9s - %(filename)-8s : %(lineno)s line - %(message)s" #日志输出的格式
+                    # -8表示占位符，让输出左对齐，输出长度都为8位
+                    ,datefmt="%Y-%m-%d %H:%M:%S" #时间输出的格式
+                    )
+
 
 @contextlib.contextmanager
 def record_time():
     try:
         start_time = datetime.datetime.now()
-        logger.info('start: {}'.format(start_time))
+        logging.info('start: {}'.format(start_time))
         yield
     finally:
-        logger.info('this code text need time: {}'.format(datetime.datetime.now() - start_time))
+        logging.info('this code text need time: {}'.format(datetime.datetime.now() - start_time))
 
 def read_binary_order_temp_file(data_file_path):
     struct_fmt = '=iiidii' 
@@ -70,22 +72,22 @@ class data_read:
         price_mtx = h5py.File(price_path, 'r')['price']
         volume_mtx = h5py.File(volume_path, 'r')['volume']
         type_mtx = h5py.File(type_path, 'r')['type']
-        #logger.info('读文件进程的内存使用：',psutil.Process(os.getpid()).memory_info().rss)
-        #logger.info('读文件进程的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
+        #logging.info('读文件进程的内存使用：',psutil.Process(os.getpid()).memory_info().rss)
+        #logging.info('读文件进程的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
 
         data_page_number = order_id_mtx.shape[0]
         data_row_number = order_id_mtx.shape[1]
         data_column_number = order_id_mtx.shape[2]        
         per_stock_page_number = data_page_number // 10
-        logger.info("page number is %d" % data_page_number)
-        logger.info("data row number is%d" % data_row_number)
-        logger.info("data column number is %d" % data_column_number)
-        logger.info("per stock has %d page" % per_stock_page_number)
+        logging.info("page number is %d" % data_page_number)
+        logging.info("data row number is%d" % data_row_number)
+        logging.info("data column number is %d" % data_column_number)
+        logging.info("per stock has %d page" % per_stock_page_number)
         #data transform
         #this implementation only works for small data(100x10x10 0.06 per stock 100x100x100 35s per stock, 100x1000x1000 1240s per stock, it's unaccecptable)
-        logger.info("begin to process data")
+        logging.info("begin to process data")
         #print(curr_stock_id)
-        logger.info("proceesing stock %d" % (curr_stock_id + 1))
+        logging.info("proceesing stock %d" % (curr_stock_id + 1))
         indexes = [i * 10 + curr_stock_id for i in range(0, per_stock_page_number)]
         curr_order_id_page = order_id_mtx[indexes,].reshape(-1).astype(np.int32)
         curr_direction_page = direction_mtx[indexes,].reshape(-1).astype(np.int32)
@@ -100,21 +102,21 @@ class data_read:
         del curr_type_page
         gc.collect()        # curr_order_page = np.transpose([curr_order_id_page, curr_direction_page, curr_price_page, curr_volumn_page, curr_type_page])
         # sort curr_order_page by order_id
-        # logger.info('排序前的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
+        # logging.info('排序前的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
         curr_order_page = curr_order_page[curr_order_page[:, 0].argsort()] 
         self.all_page.append(curr_order_page)
-        # logger.info('排序后的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
+        # logging.info('排序后的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
 
         #temp_file_path = self.data_file_path + '/team-3/' + 'temp' + str(curr_stock_id + 1)
         
-        # logger.info(str(os.getpid())+'to list前的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
+        # logging.info(str(os.getpid())+'to list前的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
         #res = curr_order_page.tolist()
-        # logger.info('to_list后的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
+        # logging.info('to_list后的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
 
         return (curr_stock_id, curr_order_page)
  
 def print_error(value):
-    logger.info("Error reason: ", value)
+    logging.info("Error reason: ", value)
 
 def write_data2file(args):
     curr_stock_id = args[0]
@@ -124,7 +126,7 @@ def write_data2file(args):
     with open(temp_file_path, 'wb+') as f:
         f.write(b''.join(map(lambda x: struct.pack("=iiidii", int(curr_stock_id), int(x[0]), int(x[1]), x[2], int(x[3]), int(x[4])), curr_order_page)))
         f.close()
-    # logger.info(str(os.getpid())+ '写入的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
+    # logging.info(str(os.getpid())+ '写入的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
     del curr_order_page
 
 
@@ -144,7 +146,8 @@ def wait_hook(order_id, stock_id, hook_mtx, trade_lists):
             target_stk_code = hook_mtx[stock_id][0][1]
             target_trade_idx = hook_mtx[stock_id][0][2]
             if len(trade_lists[target_stk_code - 1]) < target_trade_idx:
-                logger.info(f"Order {order_id} of stock {stock_id} waiting for target trade {target_trade_idx} of stock {target_stk_code}")
+                logging.info(f"Order {order_id} of stock {stock_id} waiting for target trade {target_trade_idx} of stock {target_stk_code}")
+                print(f"Order {order_id} of stock {stock_id} waiting for target trade {target_trade_idx} of stock {target_stk_code}")
                 return True
     return False
 
@@ -157,7 +160,8 @@ def get_final_order(order: Order, stock_id, hook_mtx, trade_lists):
             arg = hook_mtx[stock_id][0][3]
 
             if trade_lists[target_stk_code - 1][target_trade_idx - 1] > arg:
-                logger.info(f"Hook not valid, send empty order {order.order_id} of stock {stock_id}" )
+                logging.info(f"Hook not valid, send empty order {order.order_id} of stock {stock_id}" )
+                print(f"Hook not valid, send empty order {order.order_id} of stock {stock_id}" )
                 order.volume = 0
 
             hook_mtx[stock_id] = hook_mtx[stock_id][1:]
@@ -165,7 +169,7 @@ def get_final_order(order: Order, stock_id, hook_mtx, trade_lists):
 
 
 def put_data_in_queue(send_queue, data_file_path, client_id, trade_lists):
-    logger.info("COMMUNICATE PROCESS: CLIENT_ID %d " % (client_id))
+    logging.info("COMMUNICATE PROCESS: CLIENT_ID %d " % (client_id))
     # append squares of mylist to queue
 
     hook_mtx = h5py.File(data_file_path + '/' + "hook.h5", 'r')['hook']
@@ -174,55 +178,60 @@ def put_data_in_queue(send_queue, data_file_path, client_id, trade_lists):
     curr_order_position = [0] * 10
     stock_id = 0
     cnt = 0
-    while True:
-        #轮询10个股票
-        stock_id = stock_id % 10
-        temp_file_path = '/data/team-3/' + 'temp' + str(stock_id + 1)
-        # temp_file_path = r'C:\Users\Leons\git\UbiYagami\data_test\100x10x10\team-3\temp'+ str(stock_id + 1)
-        order_list = read_binary_order_temp_file(temp_file_path)
-        
-        #logger.info("start put orderid of stock %d in queue" % (stock_id + 1))
-        temp_order_position = curr_order_position[stock_id]
+    try:
         while True:
-            if curr_order_position[stock_id] == -1:
-                stock_id += 1
-                break
-            #发送一个stock，只要可以发就一直发        
-            order = order_list[temp_order_position]
-            order_id = order.order_id
-            need_trans_result = wait_hook(order_id, stock_id, hook_mtx, trade_lists)
-            #判断hook，能继续发就继续发
-            if need_trans_result:
-                #不能继续发，下一个股票
-                stock_id += 1
-                cnt = 0
-                break
-            else:
-                #可以继续发
-                order = get_final_order(order, stock_id, hook_mtx, trade_lists)
-                send_queue.put(order)
-                logger.info(f"Put stock {order.stk_code} order {order.order_id} to queue")
-                # print(f"Put stock {order.stk_code} order {order.order_id} to queue")
-                temp_order_position += 1
-                curr_order_position[stock_id] = temp_order_position
-
-                if temp_order_position == len(order_list): 
-                    curr_order_position[stock_id] = -1
-                    stock_id += 1
-                    cnt = 0
-                    break
-
-                cnt += 1
-                if cnt %100 == 0:
-                    stock_id += 1
-                    cnt = 0
-                    break
-                #到达trade_list末尾，置-1
+            #轮询10个股票
+            stock_id = stock_id % 10
+            temp_file_path = '/data/team-3/' + 'temp' + str(stock_id + 1)
+            # temp_file_path = r'C:\Users\Leons\git\UbiYagami\data_test\100x10x10\team-3\temp'+ str(stock_id + 1)
+            order_list = read_binary_order_temp_file(temp_file_path)
             
-        #10个股票全部搞完
-        if(sum(curr_order_position)) == -10:
-            logger.info(f"================ Put queue process end ==================")
-            break
+            #logging.info("start put orderid of stock %d in queue" % (stock_id + 1))
+            temp_order_position = curr_order_position[stock_id]
+            while True:
+                if curr_order_position[stock_id] == -1:
+                    stock_id += 1
+                    break
+                #发送一个stock，只要可以发就一直发        
+                order = order_list[temp_order_position]
+                order_id = order.order_id
+                need_trans_result = wait_hook(order_id, stock_id, hook_mtx, trade_lists)
+                #判断hook，能继续发就继续发
+                if need_trans_result:
+                    #不能继续发，下一个股票
+                    stock_id += 1
+                    cnt = 0
+                    break
+                else:
+                    #可以继续发
+                    order = get_final_order(order, stock_id, hook_mtx, trade_lists)
+                    send_queue.put(order)
+                    logging.info(f"Put stock {order.stk_code} order {order.order_id} to queue")
+                    print(f"Put stock {order.stk_code} order {order.order_id} to queue")
+                    temp_order_position += 1
+                    curr_order_position[stock_id] = temp_order_position
+
+                    if temp_order_position == len(order_list): 
+                        curr_order_position[stock_id] = -1
+                        stock_id += 1
+                        cnt = 0
+                        break
+
+                    cnt += 1
+                    if cnt %100 == 0:
+                        stock_id += 1
+                        cnt = 0
+                        break
+                    #到达trade_list末尾，置-1
+                
+            #10个股票全部搞完
+            if(sum(curr_order_position)) == -10:
+                logging.info(f"================ Put queue process end ==================")
+                print(f"================ Put queue process end ==================")
+                break
+    except Exception as e:
+        print(e)
+        logging.error(e)
 
 
 def communicate_with_server(send_queue, receive_queue, client_id, data_file_path, trade_lists):
@@ -236,20 +245,35 @@ def write_result_to_file(receive_queue, res_file_path, client_id, trade_lists):
     """
     function to print queue elements
     """
-    logger.info("WRITE FILE PROCESS: RES PATH %s CLIENT_ID %d " % (res_file_path, client_id))
+    logging.info("WRITE FILE PROCESS: RES PATH %s CLIENT_ID %d " % (res_file_path, client_id))
+    next_tradeid = 0
+    trade_cache = {}
     while True:
         if not receive_queue.empty():
-            Trade_Item = receive_queue.get_nowait()
-            if Trade_Item == "DONE":
-                break
-            else:
+            tradeid = receive_queue.get_nowait()
+            trade = tradeid.to_trade()
+            trades = []
+            if tradeid.trade_id == next_tradeid:
+                trades.append(trade)
+                next_tradeid += 1
+                while trade_cache.get(next_tradeid) is not None:
+                    trade = trade_cache.pop(next_tradeid)
+                    trades.append(trade)
+                    next_tradeid += 1
+            elif tradeid.trade_id > next_tradeid:
+                trade_cache[tradeid.trade_id] = Trade_Item
+                continue
+
+            for Trade_Item in trades:
                 stock_id = Trade_Item.stk_code
                 volume = Trade_Item.volume
                 row = trade_lists[stock_id - 1] # take the  row
                 row.append(volume) # change it
                 trade_lists[stock_id - 1] = row
-                # logger.info('GET TRADE {}'.format(type(b''.join(Trade_Item.to_bytes()))))
-                # logger.info('GET TRADE {}'.format(b''.join(Trade_Item.to_bytes())))
+                logging.info(f"Put queue process receive trade {trade.to_dict()} append to trade list")
+                print(f"Put queue process receive trade {trade.to_dict()} append to trade list")
+                # logging.info('GET TRADE {}'.format(type(b''.join(Trade_Item.to_bytes()))))
+                # logging.info('GET TRADE {}'.format(b''.join(Trade_Item.to_bytes())))
                 # trade_lists[stock_id - 1].append(volume)
                 res_path = res_file_path + '/' + 'trade' + str(stock_id)
                 with open(res_path, 'ab') as f:
@@ -266,7 +290,7 @@ if __name__ == "__main__":
     parser.add_argument("-c", "--client_id",  help="client_id, which is 1 or 2")
     args = parser.parse_args()    
 
-    logger.info("===============begin to read data==============")
+    logging.info("===============begin to read data==============")
     with record_time():
         order_data = data_read(args.filepath, args.client_id)
         batch_size = 4
@@ -286,8 +310,8 @@ if __name__ == "__main__":
         trade_lists.append([])
 
 
-    logger.info("===============data read finished==============")
-    logger.info("==========================client server %s begin===========================" % args.client_id)
+    logging.info("===============data read finished==============")
+    logging.info("==========================client server %s begin===========================" % args.client_id)
   
     # creating multiprocessing Queue
     send_queue = multiprocessing.Queue()

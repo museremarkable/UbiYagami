@@ -143,3 +143,25 @@ class Trade:
             'price': self.price,
             'volume': self.volume
         }
+
+
+class TradeID:
+    """
+    A trade type for reordering;
+    """
+    def __init__(self, stk_code, bid_id, ask_id, price, volume, trade_id):
+        self.stk_code = stk_code
+        self.bid_id = bid_id
+        self.ask_id = ask_id
+        self.price = price
+        self.volume = volume
+        self.trade_id = trade_id
+
+    def to_trade(self):
+        return Trade(
+                    stk_code = self.stk_code, 
+                    bid_id = self.bid_id, 
+                    ask_id = self.ask_id, 
+                    price = self.price, 
+                    volume = self.volume  
+                )

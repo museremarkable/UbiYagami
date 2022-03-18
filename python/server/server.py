@@ -8,6 +8,8 @@ import logging
 from time import sleep
 import h5py
 
+from python.server.data_type import TradeID
+
 logging.basicConfig(level=logging.DEBUG #设置日志输出格式
                     ,filename="exchange_runtime.log" #log日志输出的文件位置和文件名
                     ,filemode="w" #文件的写入格式，w为重新写入文件，默认是追加
@@ -694,6 +696,7 @@ class MatchingEngine:
         """
         self.multi_feed_queue = feed_queues
         self.multi_order_queue = order_queues
+        trade_ID = 0 
 
         while True:
             order = self._recv_order()
@@ -714,13 +717,17 @@ class MatchingEngine:
                 print(f"Next order ID: {self.next_order_id[order.stk_code]}")
 
             trades, quotes = self._get_multi_queue_feeds()  # TODO improve message congestion blocking
-            if len(quotes) !=0:
+            if len(trades) !=0:
                 logging.info(f"Sending back feeds")
                 minlen = len(trades)
                 print("send feed")
                 for i in range(minlen):
                     # self._send_feed({'trade':trades[i], 'quote':quotes[i]})
+                    tradeid = trades[i].to_dict()
+                    tradeid['trade_id'] = trade_ID
+                    tradeid = TradeID(**tradeid)
                     self._send_feed(trades[i])
+                    trade_ID += 1
                 # for q in quotes[minlen:]:
                 #     self._send_feed({'quote':q})
 

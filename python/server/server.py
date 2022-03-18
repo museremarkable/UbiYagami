@@ -347,6 +347,7 @@ class OrderBook:
                 # self._remove_price_level(order.price, oppo_side)
                 this_quotes = self._create_price_level(order, side)
                 quotes += this_quotes
+                logging.info(f"Order ID: {order.order_id} - Put the remaining {order.volume} volume to {side} side")
 
         else:
             # if price in the order side
@@ -354,8 +355,10 @@ class OrderBook:
             orderlink = self._get_price_level(order.price, side)
             if orderlink is None:
                 this_quotes = self._create_price_level(order, side)
+                logging.info(f"Order ID: {order.order_id} - New price in {side} side")
             else:
                 this_quotes = orderlink.insert_order(order.to_minorder())
+                logging.info(f"Order ID: {order.order_id} - Add {order.volume} volume to {side} side")
             quotes += this_quotes
         
         return trades, quotes
@@ -384,9 +387,12 @@ class OrderBook:
                 order.price = price
                 this_quotes = self._create_price_level(order, side)
                 quotes += this_quotes
+                logging.info(f"Order ID: {order.order_id} - remove empty level, and put the remaining {order.volume} volume to {side} side")
             else:
                 if orderlink.cum == 0:
                     self._remove_price_level(price, oppo_side)
+                    logging.info(f"Order ID: {order.order_id} - Just cancel out the price level")
+                logging.info(f"Order ID: {order.order_id} - the order match with the price level")
 
         else:
             logging.info(f"Order ID: {order.order_id} - opposite side optimal order discarded, order book empty. ")
@@ -403,6 +409,7 @@ class OrderBook:
         if orderlink is not None:
             this_quotes = orderlink.insert_order(order.to_minorder())
             quotes += this_quotes
+            logging.info(f"Order ID: {order.order_id} - Put the {order.volume} volume to {side} side")
         else:
             logging.info(f"Order ID: {order.order_id} - own side optimal order discarded, order book empty. ")
 
@@ -432,16 +439,18 @@ class OrderBook:
                 # the order is all filled
                 if orderlink.cum == 0:
                     self._remove_price_level(book_price, oppo_side)
+                    logging.info(f"Order ID: {order.order_id} - Remove {book_price} level at {oppo_side} side")
                 is_remained = False
                 break
             else:
                 # still volume remained, meaning the price level is empty now, remove it 
                 self._remove_price_level(book_price, oppo_side)
+                logging.info(f"Order ID: {order.order_id} - Remove {book_price} level at {oppo_side} side")
 
         if is_remained:     
             # if still volume remained after matching
             pass # TODO can do remaining order cancel feedback?
-            logging.info(f"Order ID: {order.order_id} - {OrderType.TOP_FIVE_INS_TRANS_REMAIN_CANCEL_ORDER} Not fully filled, withdraw the rest. ")
+            logging.info(f"Order ID: {order.order_id} - TOP_FIVE order Not fully filled, withdraw the rest. ")
 
         return trades, quotes
 
@@ -465,15 +474,17 @@ class OrderBook:
                 # the order is all filled
                 if orderlink.cum == 0:
                     self._remove_price_level(book_price, oppo_side)
+                    logging.info(f"Order ID: {order.order_id} - Remove {book_price} level at {oppo_side} side")
                 is_remained = False
                 break
             else:
                 # still volume remained, meaning the price level is empty now, remove it 
                 self._remove_price_level(book_price, oppo_side)
+                logging.info(f"Order ID: {order.order_id} - Remove {book_price} level at {oppo_side} side")
 
         if is_remained:     
             # if still volume remained after matching
-            logging.info(f"Order ID: {order.order_id} - {OrderType.IMMEDIATE_TRANS_REMAIN_CANCEL_ORDER} Not fully filled, withdraw the rest")
+            logging.info(f"Order ID: {order.order_id} - Immidiate order Not fully filled, withdraw the rest")
             pass # TODO can do remaining order cancel feedback?
 
         return trades, quotes
@@ -507,10 +518,12 @@ class OrderBook:
             # if still volume remained after matching
             trades = []
             quotes = []
-            logging.info(f"Order ID: {order.order_id} - {OrderType.FULL_DEAL_OR_CANCEL_ORDER} Not fully filled, cancel the order")
+            logging.info(f"Order ID: {order.order_id} - FULL_DEAL order Not fully filled, cancel the order")
         else:
+            logging.info(f"Order ID: {order.order_id} - FULL_DEAL order Not fully filled, cancel the order")
             for p in levels_to_remove:         # update levels
                 self._remove_price_level(p, oppo_side)
+                logging.info(f"Order ID: {order.order_id} - Remove price {p}")
 
         return trades, quotes
 
@@ -655,6 +668,7 @@ class MatchingEngine:
         """
         Without multiprocessing
         """
+        trade_ID = 0
         while True:
             order = self._recv_order()
             # order.stk_code += 1
@@ -683,7 +697,11 @@ class MatchingEngine:
                     print("send feed")
                     for i in range(minlen):
                         # self._send_feed({'trade':trades[i], 'quote':quotes[i]})
-                        self._send_feed(trades[i])
+                        tradeid = trades[i].to_dict()
+                        tradeid['trade_id'] = trade_ID
+                        tradeid = TradeID(**tradeid)
+                        self._send_feed(tradeid)
+                        trade_ID += 1
                     # for q in quotes[minlen:]:
                     #     self._send_feed({'quote':q})
 

@@ -632,7 +632,7 @@ class MatchingEngine:
     def _put_multi_queue_valid_order(self, order: Order):
         self.next_order_id[order.stk_code] += 1
         if self._check_order(order):               # if is valid order
-            logging.info(f"Order ID: {order.order_id} - put order to order queue")
+            logging.info(f"Order ID: {order.order_id} - put order to order queue {order.stk_code%len(self.multi_order_queue)}")
             self.multi_order_queue[order.stk_code%len(self.multi_order_queue)].put(order)
         else:
             logging.info(f"Order ID: {order.order_id} - order discarded")
@@ -717,6 +717,13 @@ class MatchingEngine:
 
         while True:
             order = self._recv_order()
+            order.order_id = int(order.order_id)
+            order.stk_code = int(order.stk_code)
+            order.price = order.price
+            order.volume = int(order.volume)
+            order.direction = DirectionType(order.direction)
+            order.type = OrderType(order.type)
+
             print(f"receive order from connect {order.order_id} of stock {order.stk_code} type {order.type}")
             if self.order_books.get(order.stk_code) is None:
                 self._new_stock_symbol(order.stk_code)
@@ -787,13 +794,19 @@ class MatchingEngine:
         start up threads here
         """
         process_list = []
-        order_queues = [Queue()] * matching_threads
-        feed_queues = [Queue()] * matching_threads
+        # order_queues = [Queue()] * matching_threads
+        # feed_queues = [Queue()] * matching_threads
+        order_queues = []
+        feed_queues = []
 
         for i in range(matching_threads):
-            p = Process(target=self.handle_order_all_stocks_thread, args=(order_queues[i], feed_queues[i]))
+            qo = Queue()
+            qt = Queue()
+            p = Process(target=self.handle_order_all_stocks_thread, args=(qo, qt))
             p.start()
             process_list.append(p)
+            order_queues.append(qo)
+            feed_queues.append(qt)
 
         p = Process(target=self.update_order_queue_thread, args=(order_queues, feed_queues))
         p.start()

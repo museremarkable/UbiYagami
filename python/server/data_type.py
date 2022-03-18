@@ -57,7 +57,8 @@ class Order:
                 'price': self.price,
                 'volume': int(self.volume)
             }
-
+    def to_list(self):
+        return [self.stk_code, self.order_id, self.direction, self.price, self.volume, self.type]
 
 class SubOrder:
     """
@@ -143,8 +144,7 @@ class Trade:
             'price': self.price,
             'volume': self.volume
         }
-
-
+        
 class TradeID:
     """
     A trade type for reordering;
@@ -175,4 +175,7 @@ class TradeID:
             'volume': self.volume,
             'trade_id': self.trade_id
         }
+
+    def to_list(self):
+        return [self.stk_code, self.bid_id, self.ask_id, self.price, self.volume, self.trade_id]
         

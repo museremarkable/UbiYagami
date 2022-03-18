@@ -1,5 +1,5 @@
 
-from data_type import Order, MinOrder, Trade, OrderType, DirectionType, Quote
+from data_type import Order, MinOrder, Trade, OrderType, DirectionType, Quote, TradeID
 from data_type import OperationType, SubOrder
 from typing import List, Dict, Tuple, Sequence
 from multiprocessing import Queue, Process
@@ -8,7 +8,6 @@ import logging
 from time import sleep
 import h5py
 
-from python.server.data_type import TradeID
 
 logging.basicConfig(level=logging.DEBUG #设置日志输出格式
                     ,filename="exchange_runtime.log" #log日志输出的文件位置和文件名
@@ -713,7 +712,7 @@ class MatchingEngine:
                     self._put_multi_queue_valid_order(order)
             elif order.order_id > self.next_order_id[order.stk_code]: 
                 self.order_cache[order.stk_code][order.order_id] = order
-                print(f"Push order to cache for reordering {self.order_cache[order.stk_code]}")
+                print(f"Push order to cache for reordering {self.order_cache[order.stk_code].keys()}")
                 print(f"Next order ID: {self.next_order_id[order.stk_code]}")
 
             trades, quotes = self._get_multi_queue_feeds()  # TODO improve message congestion blocking
@@ -726,7 +725,7 @@ class MatchingEngine:
                     tradeid = trades[i].to_dict()
                     tradeid['trade_id'] = trade_ID
                     tradeid = TradeID(**tradeid)
-                    self._send_feed(trades[i])
+                    self._send_feed(tradeid)
                     trade_ID += 1
                 # for q in quotes[minlen:]:
                 #     self._send_feed({'quote':q})

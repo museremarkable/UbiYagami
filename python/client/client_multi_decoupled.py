@@ -18,7 +18,7 @@ import pysnooper
 import gc
 
 logging.basicConfig(level=logging.DEBUG #设置日志输出格式
-                    ,filename="exchange_runtime.log" #log日志输出的文件位置和文件名
+                    ,filename="log/trader_runtime.log" #log日志输出的文件位置和文件名
                     ,filemode="w" #文件的写入格式，w为重新写入文件，默认是追加
                     ,format="%(asctime)s - %(name)s - %(levelname)-9s - %(filename)-8s : %(lineno)s line - %(message)s" #日志输出的格式
                     # -8表示占位符，让输出左对齐，输出长度都为8位
@@ -146,8 +146,8 @@ def wait_hook(order_id, stock_id, hook_mtx, trade_lists):
             target_stk_code = hook_mtx[stock_id][0][1]
             target_trade_idx = hook_mtx[stock_id][0][2]
             if len(trade_lists[target_stk_code - 1]) < target_trade_idx:
-                logging.info(f"Order {order_id} of stock {stock_id} waiting for target trade {target_trade_idx} of stock {target_stk_code}")
-                print(f"Order {order_id} of stock {stock_id} waiting for target trade {target_trade_idx} of stock {target_stk_code}")
+                logging.info(f"Order {order_id} of stock {stock_id+1} waiting for target trade {target_trade_idx} of stock {target_stk_code}")
+                print(f"Order {order_id} of stock {stock_id+1} waiting for target trade {target_trade_idx} of stock {target_stk_code}")
                 return True
     return False
 
@@ -173,6 +173,7 @@ def put_data_in_queue(send_queue, data_file_path, client_id, trade_lists):
     # append squares of mylist to queue
 
     hook_mtx = h5py.File(data_file_path + '/' + "hook.h5", 'r')['hook']
+    hook_mtx = list(hook_mtx)
     
     order_list = []
     curr_order_position = [0] * 10

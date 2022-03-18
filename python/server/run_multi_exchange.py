@@ -33,7 +33,7 @@ if __name__ == "__main__":
 	process_list.append(p)
 	p.start()
 	print('Add Process server TCP')
-	p = Process(target=server, args=(recv_queue, send_queue, ))
+	p = Process(target=server, args=(recv_queue, send_queue, 62345))
 	process_list.append(p)
 	p.start()
 

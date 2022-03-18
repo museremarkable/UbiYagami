@@ -164,3 +164,14 @@ class TradeID:
                     price = self.price, 
                     volume = self.volume  
                 )
+                
+    def to_dict(self):
+        return {
+            'stk_code': self.stk_code,
+            'bid_id': self.bid_id,
+            'ask_id': self.ask_id,
+            'price': self.price,
+            'volume': self.volume,
+            'trade_id': self.trade_id
+        }
+        

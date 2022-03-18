@@ -156,252 +156,45 @@ def write_data2file(args):
 def make_batches(size, batch_size):
     nb_batch = int(np.ceil(size / float(batch_size)))
     return [(i * batch_size, min(size, (i + 1) * batch_size)) for i in range(0, nb_batch)]
-'''
-async def order_is_need_to_tans(order_id, stock_id, hook_mtx, hook_position, trade_list):
-    """
-    use to determine whther this order need to send
-    """
-    if order_id < hook_mtx[stock_id][hook_position[stock_id]][0]:
-        # if this order id is smaller than the first hook orderid, definetely need to send
-
-        return True
-    elif order_id == hook_mtx[stock_id][hook_position[stock_id]][0]:
-        # if this order id is in hook matrix, begin to see if volume is smaller than arg
-        target_stk_code = hook_mtx[stock_id][hook_position[stock_id]][1]
-        target_trade_idx = hook_mtx[stock_id][hook_position[stock_id]][2]
-        #todo: here need to use asyncio.Event to resolve condition when trader_list length is shorter than target_trade_idx
-        arg = hook_mtx[stock_id][hook_position[stock_id]][3]
-        while True:
-            if len(trade_list[target_stk_code - 1]) < target_trade_idx:
-                logger.debug("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook")
-                logger.debug("stock %d wait 1 seconds")
-                await asyncio.sleep(1)
-            else:
-                break
-            
-        if trade_list[target_stk_code - 1][target_trade_idx - 1] < arg:
-            hook_position[stock_id] += 1
-            return True
-        else:
-            hook_position[stock_id] += 1
-            return False
-    else:
-        #if order id is bigger than the current hook order_id, we need to add hook position to make it <= hook order id
-        while(hook_mtx[stock_id][hook_position[stock_id]][0] > order_id):
-            hook_position[stock_id] += 1
-        if order_id == hook_mtx[stock_id][hook_position[stock_id]][0]:
-            target_stk_code = hook_mtx[stock_id][hook_position[stock_id]][1]
-            target_trade_idx = hook_mtx[stock_id][hook_position[stock_id]][2]
-            arg = hook_mtx[stock_id][hook_position[stock_id]][3]
-            while True:
-                if len(trade_list[target_stk_code - 1]) < target_trade_idx:
-                    logger.debug("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook" %(target_stk_code, stock_id, order_id))
-                    logger.debug("stock %d wait 1 seconds" % (stock_id))
-                    await asyncio.sleep(1)
-                else:
-                    break
-            if trade_list[target_stk_code - 1][target_trade_idx - 1] < arg:
-                hook_position[stock_id] += 1
-                return True
-            else:
-                hook_position[stock_id] += 1
-                return False
-        else:
-            return True               
-
-async def communicate_single_stock_with_server(i, data_file_path, send_queue, hook_mtx, hook_position, trade_lists):
-    temp_file_path = '/data/team-3/' + 'temp' + str(i + 1)
-    #temp_file_path = data_file_path + '/' + 'temp' + str(i + 1)
-    order_list = read_binary_order_temp_file(temp_file_path)
-    logger.info("start put orderid of stock %d in queue" % (i + 1))
-        
-    for index in range(len(order_list)):
-        order_id = order_list[index].order_id
-        price = order_list[index].price
-        direction = order_list[index].direction
-        volume = order_list[index].volume
-        type = OrderType(order_list[i].type)        
-        if await order_is_need_to_tans(order_id, i, hook_mtx, hook_position, trade_lists):
-            if index % 20 == 1:
-                # a stock hook 1000 6 230 5
-                await asyncio.sleep(1)
-                send_queue.put(order_list[index])
-                
-                logger.debug("put order_id %d of stock %d in send_queue(index is %d)" % (order_id, i + 1, index))
-                #!!!!! only for test
-                #await send_queue.get()
-                #await asyncio.sleep(1)
-            else:
-                
-                send_queue.put(order_list[index])
-                logger.debug("put order_id %d of stock %d in send_queue(index is %d)" % (order_id, i + 1, index))
-            
-        else:
-            tempdata = Order(i, order_id, direction, 0, 0, type)
-            send_queue.put(tempdata)
-            logger.debug("put no nned to use order_id %d of stock %d in send_queue" % (order_id, i + 1))
-
-async def put_in_queue(data_file_path, send_queue, hook_mtx, hook_position, trade_lists):
-    stock_1_task = asyncio.create_task(
-        communicate_single_stock_with_server(0, data_file_path, send_queue, hook_mtx, hook_position, trade_lists))
-    stock_2_task = asyncio.create_task(
-        communicate_single_stock_with_server(1, data_file_path, send_queue, hook_mtx, hook_position, trade_lists))
-    stock_3_task = asyncio.create_task(
-        communicate_single_stock_with_server(2, data_file_path, send_queue, hook_mtx, hook_position, trade_lists))
-    stock_4_task = asyncio.create_task(
-        communicate_single_stock_with_server(3, data_file_path, send_queue, hook_mtx, hook_position, trade_lists))        
-    stock_5_task = asyncio.create_task(
-        communicate_single_stock_with_server(4, data_file_path, send_queue, hook_mtx, hook_position, trade_lists))
-    stock_6_task = asyncio.create_task(
-        communicate_single_stock_with_server(5, data_file_path, send_queue, hook_mtx, hook_position, trade_lists))
-    stock_7_task = asyncio.create_task(
-        communicate_single_stock_with_server(6, data_file_path, send_queue, hook_mtx, hook_position, trade_lists))
-    stock_8_task = asyncio.create_task(
-        communicate_single_stock_with_server(7, data_file_path, send_queue, hook_mtx, hook_position, trade_lists))
-    stock_9_task = asyncio.create_task(
-        communicate_single_stock_with_server(8, data_file_path, send_queue, hook_mtx, hook_position, trade_lists))
-    stock_10_task = asyncio.create_task(
-        communicate_single_stock_with_server(9, data_file_path, send_queue, hook_mtx, hook_position, trade_lists))
-
-    ret = await asyncio.gather(stock_1_task, stock_2_task, stock_3_task, stock_4_task, stock_5_task, stock_6_task, stock_7_task, stock_8_task, stock_9_task, stock_10_task)                      
-
-
-'''
-#####################################################################################################################
-
 
 @pysnooper.snoop(output="trans_loop.log")
-def order_is_need_to_trans_watch(send_queue, order_id, stock_id, hook_mtx, hook_position, trade_lists,Order_Data):
-    # 当该股票的order_id小于hook的值时，不需要判断，直接跳过
-    if order_id < hook_mtx[stock_id][hook_position[stock_id]][0]:
-        return False
-    # 等于hook的order_id时，需要开始判断
-    elif order_id == hook_mtx[stock_id][hook_position[stock_id]][0]:
-        # logger.info("order_id %d of stock %d is hooked up" % (order_id, stock_id + 1))
-        # logger.info("now target_stk_code %d 's tar_trade_idx is %d, while, tradelsits length is %d" % (target_stk_code, target_trade_idx, len(trade_lists[stock_id])))
-        target_stk_code = hook_mtx[stock_id][hook_position[stock_id]][1]
-        target_trade_idx = hook_mtx[stock_id][hook_position[stock_id]][2]
-        arg = hook_mtx[stock_id][hook_position[stock_id]][3]
+def wait_hook_watch(order_id, stock_id, hook_mtx, trade_lists):
+    while order_id > hook_mtx[stock_id][0][0]:
+        hook_mtx[stock_id] = hook_mtx[stock_id][1:]
 
-        # 如果trade——list长度不够
-        if len(trade_lists[target_stk_code - 1]) < target_trade_idx:
+    if order_id == hook_mtx[stock_id][0][0]:
+        target_stk_code = hook_mtx[stock_id][0][1]
+        target_trade_idx = hook_mtx[stock_id][0][2]
+        if len(trade_lists[target_stk_code - 1]) < target_trade_idx -1:
             # logger.debug("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook")
             return True
-            # trade_list长度够
+    return False
 
-        # 此特殊id符合发送条件
-        if trade_lists[target_stk_code - 1][target_trade_idx - 1] <= arg:
-            hook_position[stock_id] += 1
-            # logger.debug("put order %d of stock %d in queue" % (order_id, stock_id))
-            send_queue.put(Order_Data)
-            # 发送后继续发送该股票
-            return False
-        # 不符合发送条件
-        else:
-            # 压0发送
-            hook_position[stock_id] += 1
-            send_queue.put(Order(Order_Data.str_code, Order_Data.order_id, Order_Data.direction, Order_Data.price, 0,
-                                 Order_Data.type))
-            # 继续发这个股票
-            return False
-    # order_id 大于hook  1  2  3
-    else:
-        # 必须让hookposition比orderid大
-        while (hook_mtx[stock_id][hook_position[stock_id]][0] < order_id):
-            hook_position[stock_id] += 1
-        # 当移动使得order_id和hook中orderid相等
-        if order_id == hook_mtx[stock_id][hook_position[stock_id]][0]:
-            target_stk_code = hook_mtx[stock_id][hook_position[stock_id]][1]
-            target_trade_idx = hook_mtx[stock_id][hook_position[stock_id]][2]
-            arg = hook_mtx[stock_id][hook_position[stock_id]][3]
+def wait_hook(order_id, stock_id, hook_mtx, trade_lists):
+    while order_id > hook_mtx[stock_id][0][0]:
+        hook_mtx[stock_id] = hook_mtx[stock_id][1:]
 
-            if len(trade_lists[target_stk_code - 1]) < target_trade_idx:
-                # logger.debug("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook" %(target_stk_code, stock_id, order_id))
-                # logger.debug("stock %d wait 1 seconds" % (stock_id))
-
-                return True
-                # tradelist符合条件
-
-            # 符合发送条件
-            if trade_lists[target_stk_code - 1][target_trade_idx - 1] <= arg:
-                hook_position[stock_id] += 1
-                send_queue.put(Order_Data)
-                return False
-            # 不符合发送条件
-            else:
-                hook_position[stock_id] += 1
-                send_queue.put(
-                    Order(Order_Data.str_code, Order_Data.order_id, Order_Data.direction, 0, 0, Order_Data.type))
-                return False
-        # order_id小于hookposition
-        else:
-            return False
-
-def order_is_need_to_trans(send_queue, order_id, stock_id, hook_mtx, hook_position, trade_lists,Order_Data):
-    # 当该股票的order_id小于hook的值时，不需要判断，直接跳过
-    if order_id < hook_mtx[stock_id][hook_position[stock_id]][0]:
-        return False
-    # 等于hook的order_id时，需要开始判断
-    elif order_id == hook_mtx[stock_id][hook_position[stock_id]][0]:
-        # logger.info("order_id %d of stock %d is hooked up" % (order_id, stock_id + 1))
-        # logger.info("now target_stk_code %d 's tar_trade_idx is %d, while, tradelsits length is %d" % (target_stk_code, target_trade_idx, len(trade_lists[stock_id])))
-        target_stk_code = hook_mtx[stock_id][hook_position[stock_id]][1]
-        target_trade_idx = hook_mtx[stock_id][hook_position[stock_id]][2]
-        arg = hook_mtx[stock_id][hook_position[stock_id]][3]
-
-        # 如果trade——list长度不够
-        if len(trade_lists[target_stk_code - 1]) < target_trade_idx:
-            # logger.debug("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook")
+    if order_id == hook_mtx[stock_id][0][0]:
+        target_stk_code = hook_mtx[stock_id][0][1]
+        target_trade_idx = hook_mtx[stock_id][0][2]
+        if len(trade_lists[target_stk_code - 1]) < target_trade_idx - 1:
+            logger.debug("Order {order.order_id} of stock {stock_id} waiting for target trade ")
             return True
-            # trade_list长度够
+    return False
 
-        # 此特殊id符合发送条件
-        if trade_lists[target_stk_code - 1][target_trade_idx - 1] <= arg:
-            hook_position[stock_id] += 1
-            # logger.debug("put order %d of stock %d in queue" % (order_id, stock_id))
-            send_queue.put(Order_Data)
-            # 发送后继续发送该股票
-            return False
-        # 不符合发送条件
-        else:
-            # 压0发送
-            hook_position[stock_id] += 1
-            send_queue.put(Order(Order_Data.str_code, Order_Data.order_id, Order_Data.direction, Order_Data.price, 0,
-                                 Order_Data.type))
-            # 继续发这个股票
-            return False
-    # order_id 大于hook  1  2  3
-    else:
-        # 必须让hookposition比orderid大
-        while (hook_mtx[stock_id][hook_position[stock_id]][0] < order_id):
-            hook_position[stock_id] += 1
-        # 当移动使得order_id和hook中orderid相等
-        if order_id == hook_mtx[stock_id][hook_position[stock_id]][0]:
-            target_stk_code = hook_mtx[stock_id][hook_position[stock_id]][1]
-            target_trade_idx = hook_mtx[stock_id][hook_position[stock_id]][2]
-            arg = hook_mtx[stock_id][hook_position[stock_id]][3]
+def get_final_order(order: Order, stock_id, hook_mtx, trade_lists):
+    if order.order_id == hook_mtx[stock_id][0][0]:
+        target_stk_code = hook_mtx[stock_id][0][1]
+        target_trade_idx = hook_mtx[stock_id][0][2]
+        arg = hook_mtx[stock_id][0][3]
 
-            if len(trade_lists[target_stk_code - 1]) < target_trade_idx:
-                # logger.debug("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook" %(target_stk_code, stock_id, order_id))
-                # logger.debug("stock %d wait 1 seconds" % (stock_id))
+        if trade_lists[target_stk_code - 1][target_trade_idx - 1] > arg:
+            logger.debug(f"Hook not valid, send empty order {order.order_id} of stock {stock_id}" )
+            order.volume = 0
 
-                return True
-                # tradelist符合条件
+        hook_mtx[stock_id] = hook_mtx[stock_id][1:]
+    return order
 
-            # 符合发送条件
-            if trade_lists[target_stk_code - 1][target_trade_idx - 1] <= arg:
-                hook_position[stock_id] += 1
-                send_queue.put(Order_Data)
-                return False
-            # 不符合发送条件
-            else:
-                hook_position[stock_id] += 1
-                send_queue.put(
-                    Order(Order_Data.str_code, Order_Data.order_id, Order_Data.direction, 0, 0, Order_Data.type))
-                return False
-        # order_id小于hookposition
-        else:
-            return False
 
 def put_data_in_queue(send_queue, data_file_path, client_id, trade_lists):
     logger.info("COMMUNICATE PROCESS: CLIENT_ID %d " % (client_id))
@@ -431,15 +224,12 @@ def put_data_in_queue(send_queue, data_file_path, client_id, trade_lists):
         temp_order_position = curr_order_position[stock_id]
         while True:
             #发送一个stock，只要可以发就一直发        
-            order_id = order_list[temp_order_position].order_id
-            price = order_list[temp_order_position].price
-            direction = order_list[temp_order_position].direction
-            volume = order_list[temp_order_position].volume
-            type = OrderType(order_list[temp_order_position].type)
+            order = order_list[temp_order_position]
+            order_id = order.order_id
             if order_id > 5030 and order_id < 5040:
-                need_trans_result = order_is_need_to_trans_watch(send_queue, order_id, stock_id, hook_mtx, hook_position, trade_lists, curr_order_position[stock_id])
+                need_trans_result = wait_hook_watch(order_id, stock_id, hook_mtx, trade_lists)
             else:
-                need_trans_result = order_is_need_to_trans(send_queue, order_id, stock_id, hook_mtx, hook_position, trade_lists, curr_order_position[stock_id])
+                need_trans_result = wait_hook(order_id, stock_id, hook_mtx, trade_lists)
             #判断hook，能继续发就继续发
             if need_trans_result:
                 #不能继续发，下一个股票
@@ -447,11 +237,12 @@ def put_data_in_queue(send_queue, data_file_path, client_id, trade_lists):
                 break
             else:
                 #可以继续发
-                send_queue.put(order_list[temp_order_position])
+                order = get_final_order(order, stock_id, hook_mtx, trade_lists)
+                send_queue.put(order)
                 temp_order_position += 1
                 curr_order_position[stock_id] = temp_order_position
                 cnt += 1
-                if cnt %100 == 0:
+                if cnt % 100 == 0:
                     stock_id += 1
                     cnt = 0
                     break
@@ -548,7 +339,7 @@ if __name__ == "__main__":
     process_list = []
     #process_read_data_from_file = multiprocessing.Process(target=read_data_from_file, args=(args.filepath, int(args.client_id), ))
     process_put_data_in_queue = multiprocessing.Process(target=put_data_in_queue, args=(send_queue, args.filepath, int(args.client_id), trade_lists))
-    process_communicate_with_server = multiprocessing.Process(target=communicate_with_server, args=(send_queue, receive_queue,int(args.client_id), args.filepath,trade_lists))
+    process_communicate_with_server = multiprocessing.Process(target=communicate_with_server, args=(send_queue,receive_queue,int(args.client_id), args.filepath,trade_lists))
     process_write_result_to_file = multiprocessing.Process(target=write_result_to_file, args=(receive_queue,args.respath, int(args.client_id),trade_lists))
     
     #process_read_data_from_file.start()

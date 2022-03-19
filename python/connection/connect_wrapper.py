@@ -59,7 +59,10 @@ class connect:
 		# self.send_q_queue = qq
 
 	def recv_order(self):
-		return self.read_queue.get()
+		if not self.read_queue.empty():
+			return self.read_queue.get()
+		else:
+			return None
 
 	def send_feed(self, message: dict):
 		self.send_queue.put(message)

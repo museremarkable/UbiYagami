@@ -70,7 +70,7 @@ def read_binary_order_temp_file(data_file_path):
             results.append(Order(s[0] + 1, s[1], s[2], s[3], s[4], s[5]))
     return results
 
-def read_binary_mit_pointer(data_file_path, start): #read 100 lines from starting point
+def read_binary_mit_pointer(data_file_path, start, length): #read 100 lines from starting point
     struct_fmt = '=iiidii' #
     struct_len = struct.calcsize(struct_fmt)
     struct_unpack = struct.Struct(struct_fmt).unpack_from
@@ -78,7 +78,7 @@ def read_binary_mit_pointer(data_file_path, start): #read 100 lines from startin
     starting_byte = start * struct_len
     with open(data_file_path, "rb") as f:
         f.seek(starting_byte)
-        for i in range(100):
+        for i in range(length):
             data = f.read(struct_len)
             if not data:
                 break
@@ -243,13 +243,81 @@ def put_data_in_queue(send_queue, data_file_path, client_id, trade_lists):
             if curr_order_position[stock_id] == -1:
                 stock_id += 1
                 break
-            #发送一个stock，只要可以发就一直发        
+            #发送一个stock，只要可以发就一直发
             order = order_list[temp_order_position]
             order_id = order.order_id
-            # if order_id > 5030 and order_id < 5040:
-            #     need_trans_result = wait_hook_watch(order_id, stock_id, hook_mtx, trade_lists)
-            # else:
-            #     need_trans_result = wait_hook(order_id, stock_id, hook_mtx, trade_lists)
+            need_trans_result = wait_hook(order_id, stock_id, hook_mtx, trade_lists)
+            #判断hook，能继续发就继续发
+            if need_trans_result:
+                #不能继续发，下一个股票
+                stock_id += 1
+                cnt = 0
+                break
+            else:
+                #可以继续发
+                order = get_final_order(order, stock_id, hook_mtx, trade_lists)
+                send_queue.put(order)
+                print(f"Put stock {order.stk_code} order {order.order_id} to queue")
+                logging.info(f"Put stock {order.stk_code} order {order.order_id} to queue")
+                temp_order_position += 1
+                curr_order_position[stock_id] = temp_order_position
+
+                if temp_order_position == len(order_list): 
+                    curr_order_position[stock_id] = -1
+                    stock_id += 1
+                    cnt = 0
+                    break
+
+                cnt += 1
+                if cnt %100 == 0:
+                    stock_id += 1
+                    cnt = 0
+                    break
+                #到达trade_list末尾，置-1
+            
+        #10个股票全部搞完
+        if(sum(curr_order_position)) == -10:
+            logging.info(f"=============== Put queue process end ====================")
+            print(f"=============== Put queue process end ====================")
+            break
+
+def put_data_in_queue_squeezed(send_queue, data_file_path, client_id, trade_lists):
+    logging.info("COMMUNICATE PROCESS: CLIENT_ID %d " % (client_id))
+    # append squares of mylist to queue
+    '''
+    for i in range(10):
+        temp_file_path = data_file_path + '/' + 'temp' + str(i + 1)
+        order_list = read_binary_order_temp_file(temp_file_path)
+        for i in range(len(order_list)):
+    '''
+    hook_mtx = h5py.File(data_file_path + '/' + "hook.h5", 'r')['hook']
+    hook_mtx = list(hook_mtx)
+    order_list = []
+    curr_order_position = [0] * 10
+    #asyncio.run(put_in_queue(data_file_path, send_queue, hook_mtx, hook_position, trade_lists))
+    stock_id = 0
+    cnt = 0
+    while True:
+        #轮询10个股票
+        stock_id = stock_id % 10
+        # temp_file_path = '/data/team-3/' + 'temp' + str(stock_id + 1)
+        temp_file_path = f'temp/temp{client_id}-' + str(stock_id + 1) 
+        # temp_file_path = r'C:\Users\Leons\git\UbiYagami\data_test\100x10x10\team-3\temp'+ str(stock_id + 1)
+        #logging.info(temp_file_path)
+        print('当前进程 Put queue 的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
+
+        order_list = read_binary_mit_pointer(temp_file_path, curr_order_position[stock_id], length=100)
+        # order_list = read_binary_order_temp_file(temp_file_path)
+        
+        #logging.info("start put orderid of stock %d in queue" % (stock_id + 1))
+        temp_order_position = curr_order_position[stock_id]
+        while True:
+            if curr_order_position[stock_id] == -1:
+                stock_id += 1
+                break
+            #发送一个stock，只要可以发就一直发
+            order = order_list[temp_order_position]
+            order_id = order.order_id
             need_trans_result = wait_hook(order_id, stock_id, hook_mtx, trade_lists)
             #判断hook，能继续发就继续发
             if need_trans_result:
@@ -286,13 +354,6 @@ def put_data_in_queue(send_queue, data_file_path, client_id, trade_lists):
             break
 
 
-def communicate_with_server(send_queue, receive_queue, client_id, data_file_path, trade_lists):
-    """
-    function to square a given list
-    """
-    run_client(receive_queue,send_queue)
-
-
 def write_result_to_file(receive_queue, res_file_path, client_id, trade_lists):
     """
     function to print queue elements
@@ -325,6 +386,7 @@ def write_result_to_file(receive_queue, res_file_path, client_id, trade_lists):
                 trade_lists[stock_id - 1] = row
                 # logging.info(f"Put queue process receive trade {trade.to_dict()} append to trade list")
                 print(f"Write result process receive trade {trade.to_dict()} append to trade list")
+                logging.info(f"Write result process receive trade {trade.to_dict()} append to trade list")
                 # logging.info('GET TRADE {}'.format(type(b''.join(Trade_Item.to_bytes()))))
                 # logging.info('GET TRADE {}'.format(b''.join(Trade_Item.to_bytes())))
                 # trade_lists[stock_id - 1].append(volume)

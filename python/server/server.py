@@ -7,7 +7,8 @@ from multiprocessing.managers import BaseManager
 import logging
 from time import sleep
 import h5py
-
+import psutil
+import os
 
 logging.basicConfig(level=logging.DEBUG #设置日志输出格式
                     ,filename="exchange_runtime.log" #log日志输出的文件位置和文件名
@@ -671,22 +672,30 @@ class MatchingEngine:
         trade_ID = 0
         while True:
             order = self._recv_order()
-            # order.stk_code += 1
-            print(f"receive order from connect {order.order_id} of stock {order.stk_code} type {order.type}")
-            if self.order_books.get(order.stk_code) is None:
-                self._new_stock_symbol(order.stk_code)
-            
-            if order.order_id == self.next_order_id[order.stk_code]:        # if hit next order_id
-                print("Order matches the next order ID !!!!")
-                self._put_queue_valid_order(order)
-                # if the next id has already been waiting in cache
-                while self.order_cache[order.stk_code].get(self.next_order_id[order.stk_code]) is not None:
-                    order = self.order_cache[order.stk_code].pop(self.next_order_id[order.stk_code]) 
+            if order is not None:
+                order.order_id = int(order.order_id)
+                order.stk_code = int(order.stk_code)
+                order.price = order.price
+                order.volume = int(order.volume)
+                order.direction = DirectionType(order.direction)
+                order.type = OrderType(order.type)
+
+                # order.stk_code += 1
+                print(f"receive order from connect {order.order_id} of stock {order.stk_code} type {order.type}")
+                if self.order_books.get(order.stk_code) is None:
+                    self._new_stock_symbol(order.stk_code)
+                
+                if order.order_id == self.next_order_id[order.stk_code]:        # if hit next order_id
+                    print("Order matches the next order ID !!!!")
                     self._put_queue_valid_order(order)
-            elif order.order_id > self.next_order_id[order.stk_code]: 
-                self.order_cache[order.stk_code][order.order_id] = order
-                print(f"Push order to cache for reordering {self.order_cache[order.stk_code]}")
-                print(f"Next order ID: {self.next_order_id[order.stk_code]}")
+                    # if the next id has already been waiting in cache
+                    while self.order_cache[order.stk_code].get(self.next_order_id[order.stk_code]) is not None:
+                        order = self.order_cache[order.stk_code].pop(self.next_order_id[order.stk_code]) 
+                        self._put_queue_valid_order(order)
+                elif order.order_id > self.next_order_id[order.stk_code]: 
+                    self.order_cache[order.stk_code][order.order_id] = order
+                    print(f"Push order to cache for reordering {self.order_cache[order.stk_code]}")
+                    print(f"Next order ID: {self.next_order_id[order.stk_code]}")
 
             self._handle_order_all_stock_single_loop()
 
@@ -717,41 +726,45 @@ class MatchingEngine:
 
         while True:
             order = self._recv_order()
-            order.order_id = int(order.order_id)
-            order.stk_code = int(order.stk_code)
-            order.price = order.price
-            order.volume = int(order.volume)
-            order.direction = DirectionType(order.direction)
-            order.type = OrderType(order.type)
+            if order is not None:
+                order.order_id = int(order.order_id)
+                order.stk_code = int(order.stk_code)
+                order.price = order.price
+                order.volume = int(order.volume)
+                order.direction = DirectionType(order.direction)
+                order.type = OrderType(order.type)
 
-            print(f"receive order from connect {order.order_id} of stock {order.stk_code} type {order.type}")
-            if self.order_books.get(order.stk_code) is None:
-                self._new_stock_symbol(order.stk_code)
-            
-            if order.order_id == self.next_order_id[order.stk_code]:        # if hit next order_id
-                print("Order matches the next order ID !!!!")
-                self._put_multi_queue_valid_order(order)
-                # if the next id has already been waiting in cache
-                while self.order_cache[order.stk_code].get(self.next_order_id[order.stk_code]) is not None:
-                    order = self.order_cache[order.stk_code].pop(self.next_order_id[order.stk_code]) 
+                print(f"receive order from connect {order.to_dict()}")
+                logging.info(f"receive order from connect {order.to_dict()}")
+                if self.order_books.get(order.stk_code) is None:
+                    self._new_stock_symbol(order.stk_code)
+                
+                if order.order_id == self.next_order_id[order.stk_code]:        # if hit next order_id
+                    print("Order matches the next order ID !!!!")
                     self._put_multi_queue_valid_order(order)
-            elif order.order_id > self.next_order_id[order.stk_code]: 
-                self.order_cache[order.stk_code][order.order_id] = order
-                print(f"Push order to cache for reordering {self.order_cache[order.stk_code].keys()}")
-                print(f"Next order ID: {self.next_order_id[order.stk_code]}")
+                    # if the next id has already been waiting in cache
+                    while self.order_cache[order.stk_code].get(self.next_order_id[order.stk_code]) is not None:
+                        order = self.order_cache[order.stk_code].pop(self.next_order_id[order.stk_code]) 
+                        self._put_multi_queue_valid_order(order)
+                elif order.order_id > self.next_order_id[order.stk_code]: 
+                    self.order_cache[order.stk_code][order.order_id] = order
+                    print(f"Push order to cache for reordering {self.order_cache[order.stk_code].keys()}")
+                    logging.info(f"Push order to cache for reordering {self.order_cache[order.stk_code].keys()}")
+                    print(f"Next order ID: {self.next_order_id[order.stk_code]}")
 
             trades, quotes = self._get_multi_queue_feeds()  # TODO improve message congestion blocking
             if len(trades) !=0:
-                logging.info(f"Sending back feeds")
+                print('当前进程 Data handler 的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
                 minlen = len(trades)
                 print("send feed")
                 for i in range(minlen):
-                    # self._send_feed({'trade':trades[i], 'quote':quotes[i]})
                     tradeid = trades[i].to_dict()
                     tradeid['trade_id'] = trade_ID
                     tradeid = TradeID(**tradeid)
                     self._send_feed(tradeid)
                     trade_ID += 1
+                    logging.info(f"Sent back feeds {tradeid.to_dict()}")
+                    print(f"Sent back feeds {tradeid.to_dict()}")
                 # for q in quotes[minlen:]:
                 #     self._send_feed({'quote':q})
 
@@ -766,13 +779,14 @@ class MatchingEngine:
         
         while True:
             order = self._get_queue_valid_order()
-            print(f"Matchiing thread got an order from outter queue {order.order_id} of stock{order.stk_code}")
+            print(f"Matching thread got an order from outter queue {order.order_id} of stock{order.stk_code}")
             if self.order_books.get(order.stk_code) is None:
                 self._new_stock_symbol(order.stk_code)
             order_type = order.type 
             stock = order.stk_code
-            print(f"Order ID: {order.order_id} - {order_type} order executing")
-            logging.info(f"Order ID: {order.order_id} - {order_type} order executing")
+            print(f"Order ID: {order.order_id} - stock {stock} type {order_type} order executing")
+            logging.info(f"Order ID: {order.order_id} - stock {stock} type {order_type} order executing")
+            print('当前进程 Matching 的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
             if order_type == OrderType.LIMIT_ORDER:
                 trades, quotes = self.order_books[stock].handle_order_limit(order.to_suborder())
             elif order_type == OrderType.COUNTER_PARTY_BEST_PRICE_ORDER: 
@@ -793,6 +807,7 @@ class MatchingEngine:
         """
         start up threads here
         """
+        logging.info(f"Matching Engine started, with {matching_threads} processes")
         process_list = []
         # order_queues = [Queue()] * matching_threads
         # feed_queues = [Queue()] * matching_threads

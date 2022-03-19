@@ -30,8 +30,10 @@ def distribute_queue(q: Queue, qs: Queue):
 
 if __name__ == "__main__":
 	close_file = "data_test/100x10x10/price1.h5"
+	# close_file = "data_test/100x1000x1000/price1.h5"
 
 	filepath = r"C:\Users\Leons\git\UbiYagami\data_test\100x10x10"
+	# filepath = r"C:\Users\Leons\git\UbiYagami\data_test\100x1000x1000"
 	respath = r"C:\Users\Leons\git\UbiYagami\results\trader"
 
 	order_queue, main_feed_queue  = Queue(), Queue()

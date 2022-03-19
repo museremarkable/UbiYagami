@@ -1,11 +1,8 @@
 from multiprocessing import Queue, Process
-from order_reader import DataReader
-from utils import list_to_order
-from unittest import mock
-from time import sleep
 from client_multiprocess_fortest import trader
 from server import MatchingEngine
 import sys
+sys.path.append("..")
 
 class connect:
 	def __init__(self, qo, qt, qq):
@@ -24,6 +21,13 @@ class connect:
 		self.send_q_queue.put(quote)
 
 
+
+def exchange(recv_queue, send_queue):
+	connect_kernel = connect(recv_queue=recv_queue, send_queue=send_queue)
+	engine = MatchingEngine(connect=connect_kernel, path_close=close_file)
+	engine.engine_main_thread(matching_threads=2)
+
+
 if __name__ == "__main__":
 	trade_path = "results/trader"
 	close_file = "data_test/100x10x10/price1.h5"
@@ -32,12 +36,9 @@ if __name__ == "__main__":
 
 
 	qo, qt, qq = Queue(), Queue(), Queue()
-	connect_k = connect(qo, qt, qq)
-	engine = MatchingEngine(connect_k, path_close=close_file)
-	# engine.connect = connect_k
 
 	process_list = []
-	p = Process(target=engine.engine_main_thread, args=(1, ))
+	p = Process(target=exchange, args=(qo, qt))
 	p.start()
 	process_list.append(p)
 	process_list += trader(1, data_path1, trade_path+"1", qo, qt)

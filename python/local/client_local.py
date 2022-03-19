@@ -45,7 +45,7 @@ from connection.tcp_client import run_client
 import datetime
 import contextlib
 from functools import partial
-# import psutil
+import psutil
 # import pysnooper
 import gc
 @contextlib.contextmanager
@@ -70,6 +70,21 @@ def read_binary_order_temp_file(data_file_path):
             results.append(Order(s[0] + 1, s[1], s[2], s[3], s[4], s[5]))
     return results
 
+def read_binary_mit_pointer(data_file_path, start): #read 100 lines from starting point
+    struct_fmt = '=iiidii' #
+    struct_len = struct.calcsize(struct_fmt)
+    struct_unpack = struct.Struct(struct_fmt).unpack_from
+    results = []
+    starting_byte = start * struct_len
+    with open(data_file_path, "rb") as f:
+        f.seek(starting_byte)
+        for i in range(100):
+            data = f.read(struct_len)
+            if not data:
+                break
+            s = struct_unpack(data)
+            results.append(Order(s[0] + 1, s[1], s[2], s[3], s[4], s[5]))
+    return results
 class data_read:
     def __init__(self, data_file_path, client_id):
 
@@ -159,35 +174,23 @@ def make_batches(size, batch_size):
     nb_batch = int(np.ceil(size / float(batch_size)))
     return [(i * batch_size, min(size, (i + 1) * batch_size)) for i in range(0, nb_batch)]
 
-# @pysnooper.snoop(output="trans_loop.log")
-def wait_hook_watch(order_id, stock_id, hook_mtx, trade_lists):
-    if len(hook_mtx[stock_id]) > 0:
-        while order_id > hook_mtx[stock_id][0][0]:
-            hook_mtx[stock_id] = hook_mtx[stock_id][1:]
-            if len(hook_mtx[stock_id]) == 0:
-                return False
-
-        if order_id == hook_mtx[stock_id][0][0]:
-            target_stk_code = hook_mtx[stock_id][0][1]
-            target_trade_idx = hook_mtx[stock_id][0][2]
-            if len(trade_lists[target_stk_code - 1]) < target_trade_idx:
-                logging.info("corresponding stock %d 's tradelist is not enough when stock %d order_id %d inquire hook")
-                return True
-    return False
 
 def wait_hook(order_id, stock_id, hook_mtx, trade_lists):
     if len(hook_mtx[stock_id]) > 0:
         while order_id > hook_mtx[stock_id][0][0]:
             hook_mtx[stock_id] = hook_mtx[stock_id][1:]
             if len(hook_mtx[stock_id]) == 0:
+                logging.info(f"Hook list of stock {stock_id+1} ended")
                 return False
 
         if order_id == hook_mtx[stock_id][0][0]:
             target_stk_code = hook_mtx[stock_id][0][1]
             target_trade_idx = hook_mtx[stock_id][0][2]
             if len(trade_lists[target_stk_code - 1]) < target_trade_idx:
-                logging.info(f"Order {order_id} of stock {stock_id} waiting for target trade {target_trade_idx} of stock {target_stk_code}")
+                logging.info(f"Order {order_id} of stock {stock_id+1} waiting for target trade {target_trade_idx} of stock {target_stk_code}")
                 return True
+    else:
+        logging.info(f"Hook list of stock {stock_id+1} ended")
     return False
 
 def get_final_order(order: Order, stock_id, hook_mtx, trade_lists):
@@ -217,19 +220,6 @@ def put_data_in_queue(send_queue, data_file_path, client_id, trade_lists):
     '''
     hook_mtx = h5py.File(data_file_path + '/' + "hook.h5", 'r')['hook']
     hook_mtx = list(hook_mtx)
-    # hook_mtx = [
-    #             [[100, 1, 1, 10],[103, 2, 20, 10],],
-    #             [[100, 2, 1, 10],[103, 3, 20, 10],],
-    #             [[100, 3, 1, 10],[103, 5, 20, 10],],
-    #             [[100, 4, 1, 10],[103, 7, 20, 10],],
-    #             [[100, 5, 1, 10],[103, 6, 20, 10],],
-
-    #             [[100, 6, 1, 10],[103, 9, 20, 10],],
-    #             [[100, 7, 1, 10],[103, 10,20, 10],],
-    #             [[100, 8, 1, 10],[103, 1, 20, 10],],
-    #             [[100, 9, 1, 10],[103, 8, 20, 10],],
-    #             [[100, 10,1, 10],[103, 4, 20, 10],],
-    #             ]
     order_list = []
     curr_order_position = [0] * 10
     #asyncio.run(put_in_queue(data_file_path, send_queue, hook_mtx, hook_position, trade_lists))
@@ -242,6 +232,9 @@ def put_data_in_queue(send_queue, data_file_path, client_id, trade_lists):
         temp_file_path = f'temp/temp{client_id}-' + str(stock_id + 1) 
         # temp_file_path = r'C:\Users\Leons\git\UbiYagami\data_test\100x10x10\team-3\temp'+ str(stock_id + 1)
         #logging.info(temp_file_path)
+        print('当前进程 Put queue 的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
+
+        # order_list = read_binary_mit_pointer(temp_file_path, curr_order_position[stock_id])
         order_list = read_binary_order_temp_file(temp_file_path)
         
         #logging.info("start put orderid of stock %d in queue" % (stock_id + 1))
@@ -269,6 +262,7 @@ def put_data_in_queue(send_queue, data_file_path, client_id, trade_lists):
                 order = get_final_order(order, stock_id, hook_mtx, trade_lists)
                 send_queue.put(order)
                 print(f"Put stock {order.stk_code} order {order.order_id} to queue")
+                logging.info(f"Put stock {order.stk_code} order {order.order_id} to queue")
                 temp_order_position += 1
                 curr_order_position[stock_id] = temp_order_position
 
@@ -321,6 +315,7 @@ def write_result_to_file(receive_queue, res_file_path, client_id, trade_lists):
             elif tradeid.trade_id > next_tradeid:
                 trade_cache[tradeid.trade_id] = trade
                 continue
+            print('当前进程 Write result 的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
 
             for Trade_Item in trades:
                 stock_id = Trade_Item.stk_code

@@ -48,6 +48,24 @@ def read_binary_order_temp_file(data_file_path):
             results.append(Order(s[0] + 1, s[1], s[2], s[3], s[4], s[5]))
     return results
 
+
+def read_binary_mit_pointer(data_file_path, start, length): #read 100 lines from starting point
+    struct_fmt = '=iiidii' #
+    struct_len = struct.calcsize(struct_fmt)
+    struct_unpack = struct.Struct(struct_fmt).unpack_from
+    results = []
+    starting_byte = start * struct_len
+    with open(data_file_path, "rb") as f:
+        f.seek(starting_byte)
+        for i in range(length):
+            data = f.read(struct_len)
+            if not data:
+                break
+            s = struct_unpack(data)
+            results.append(Order(s[0] + 1, s[1], s[2], s[3], s[4], s[5]))
+    return results
+
+
 class data_read:
     def __init__(self, data_file_path, client_id):
 
@@ -235,6 +253,71 @@ def put_data_in_queue(send_queue, data_file_path, client_id, trade_lists):
         logging.error(e)
 
 
+def put_data_in_queue_squeezed(send_queue, data_file_path, client_id, trade_lists):
+    logging.info("COMMUNICATE PROCESS: CLIENT_ID %d " % (client_id))
+    # append squares of mylist to queue
+    '''
+    for i in range(10):
+        temp_file_path = data_file_path + '/' + 'temp' + str(i + 1)
+        order_list = read_binary_order_temp_file(temp_file_path)
+        for i in range(len(order_list)):
+    '''
+    hook_mtx = h5py.File(data_file_path + '/' + "hook.h5", 'r')['hook']
+    hook_mtx = list(hook_mtx)
+    curr_order_position = [0] * 10
+    order_length = [-1] * 10
+    stock_id = 0
+    batch_size = 100
+    while True:
+        #轮询10个股票
+        stock_id = stock_id % 10
+        if curr_order_position[stock_id] == -1:
+            stock_id += 1
+            continue
+
+        # temp_file_path = '/data/team-3/' + 'temp' + str(stock_id + 1)
+        temp_file_path = f'temp/temp{client_id}-' + str(stock_id + 1) 
+        # temp_file_path = r'C:\Users\Leons\git\UbiYagami\data_test\100x10x10\team-3\temp'+ str(stock_id + 1)
+
+        order_list = read_binary_mit_pointer(temp_file_path, curr_order_position[stock_id], length=batch_size)
+
+        if len(order_list) < batch_size:
+            order_length[stock_id] = curr_order_position[stock_id] + len(order_list)
+            
+        print('当前进程 Put queue 的内存使用：%.4f GB' % (psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024 / 1024) )
+        for i, order in enumerate(order_list):
+            #发送一个stock，只要可以发就一直发
+            need_trans_result = wait_hook(order.order_id, stock_id, hook_mtx, trade_lists)
+            #判断hook，能继续发就继续发
+            if need_trans_result:
+                #不能继续发，下一个股票
+                stock_id += 1
+                break
+            else:
+                #可以继续发
+                order = get_final_order(order, stock_id, hook_mtx, trade_lists)
+                send_queue.put(order)
+                print(f"Put stock {order.stk_code} order {order.order_id} to queue")
+                logging.info(f"Put stock {order.stk_code} order {order.order_id} to queue")
+                # temp_order_position += 1
+                # curr_order_position[stock_id] = temp_order_position
+                curr_order_position[stock_id] += 1
+
+                if curr_order_position[stock_id] == order_length[stock_id]: 
+                    curr_order_position[stock_id] = -1
+                    stock_id += 1
+                    logging.info(f"Stock {stock_id+1} order list ended. ")
+                    break
+
+                #到达trade_list末尾，置-1
+            stock_id += i//(batch_size-1)
+        #10个股票全部搞完
+        if(sum(curr_order_position)) == -10:
+            logging.info(f"=============== Put queue process end ====================")
+            print(f"=============== Put queue process end ====================")
+            break
+
+
 def communicate_with_server(send_queue, receive_queue, client_id, data_file_path, trade_lists):
     """
     function to square a given list
@@ -283,6 +366,32 @@ def write_result_to_file(receive_queue, res_file_path, client_id, trade_lists):
         #     time.sleep(0.05)
         
 
+def read_answer_from_file(data_file_path):
+    struct_fmt = '=iiidi' # 
+    struct_len = struct.calcsize(struct_fmt)
+    struct_unpack = struct.Struct(struct_fmt).unpack_from
+    results = []
+    with open(data_file_path, "rb") as f:
+        while True:
+            data = f.read(struct_len)
+            if not data: break
+            s = struct_unpack(data)
+            results.append(s)
+    return results
+
+
+def restore_trade(respath, stock_id):
+    trade_path = respath + '/' + 'trade' + str(stock_id)
+    if os.path.exists(trade_path):
+        logging.info(f"Restore trades of stock {stock_id} from memory")
+        print(f"Restore trades of stock {stock_id} from memory")
+        trades = read_answer_from_file(trade_path)
+        return [x[4] for x in trades]
+    else: 
+        return []
+    
+
+
 if __name__ == "__main__":
     # input list
     parser = ArgumentParser()
@@ -307,9 +416,8 @@ if __name__ == "__main__":
     manager = multiprocessing.Manager()
     # a simple implemment to achieve result
     trade_lists = manager.list()
-    for i in range(10):
-        trade_lists.append([])
-
+    for i in range(1,11):
+        trade_lists.append(restore_trade(args.respath, i))
 
     logging.info("===============data read finished==============")
     logging.info("==========================client server %s begin===========================" % args.client_id)

@@ -539,7 +539,7 @@ class MatchingEngine:
     * order id sorting
     * order checking (out of price range limit, volume>0, price>0, id>0)
     """
-    def __init__(self, connect, path_close="data_test/100x10x10/price1.h5"):
+    def __init__(self, connect, res_path, path_close="data_test/100x10x10/price1.h5"):
         self.order_books = {}       # order book of different stocks
         self.next_order_id = {}
         self.order_queue = Queue()
@@ -547,6 +547,7 @@ class MatchingEngine:
         self.multi_order_queue =  []
         self.multi_feed_queue =  []
         self.order_cache = {}   # list of dicts
+        self.res_path = res_path
         # data_file_path = 'data_test/100x10x10'
         # prev_price_path = data_file_path + '/'+ "price1.h5"
         price_mtx = h5py.File(path_close, 'r')['prev_close']
@@ -593,6 +594,10 @@ class MatchingEngine:
 
         return valid 
 
+    def _write_trade(self, trade: Trade):
+        res_path = self.res_path + '/' + 'trade' + str(trade.stk_code)
+        with open(res_path, 'ab') as f:
+            f.write(trade.to_bytes())
 
     def _new_stock_symbol(self, stock):
         self.order_books[stock] = OrderBook(stock)
@@ -762,6 +767,7 @@ class MatchingEngine:
                     tradeid['trade_id'] = trade_ID
                     tradeid = TradeID(**tradeid)
                     self._send_feed(tradeid)
+                    self._write_trade(trades[i])
                     trade_ID += 1
                     logging.info(f"Sent back feeds {tradeid.to_dict()}")
                     print(f"Sent back feeds {tradeid.to_dict()}")

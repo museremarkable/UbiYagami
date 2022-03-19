@@ -13,15 +13,21 @@ def read_answer_from_file(data_file_path):
             results.append(s)
     return results
 
-ix = 2
-path_result = "python/server"
+path_result = "results/trader1"
 path_true = "data_test/100x10x10"
-data_file_path = path_result + '/' + 'trade' + str(ix)
-answer_file_path = path_true + '/' + 'trade' + str(ix)
-results_g = read_answer_from_file(data_file_path)
-results_a = read_answer_from_file(answer_file_path)
-print(f"Result length {len(results_g)} ")
-print(f"True length {len(results_a)}")
-rang = min(len(results_g), len(results_a))
-diff = [ (x,y) for x, y in zip(results_a, results_g) if x!=y]
+for ix in range(1,11):
+	data_file_path = path_result + '/' + 'trade' + str(ix)
+	answer_file_path = path_true + '/' + 'trade' + str(ix)
+	results_g = read_answer_from_file(data_file_path)
+	results_a = read_answer_from_file(answer_file_path)
+	print(f"Result length {len(results_g)} ")
+	print(f"True length {len(results_a)}")
+	rang = min(len(results_g), len(results_a))
+	diff = [ (x,y) for x, y in zip(results_a, results_g) if x!=y]
+	if len(diff) == 0:
+		print(f"trade{ix} correct")
+	else:
+		print(f"trade{ix} has diff")
+		with open(path_result + f"/diff{ix}", "w") as f:
+			f.write(f"{diff}")
 print("done")

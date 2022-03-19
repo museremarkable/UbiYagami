@@ -1,9 +1,9 @@
 import sys 
-sys.path.append("")
+sys.path.append("./python/utils")
 import asyncio
 from asyncio import StreamWriter, StreamReader
-from utils.wirte_logger import get_logger
-from utils.data_trans import convert_msg2obj, convert_obj2msg
+from wirte_logger import get_logger
+from data_trans import convert_msg2obj, convert_obj2msg
 from queue import Queue
 import json
 import socket

@@ -5,7 +5,7 @@ sys.path.append("python")
 from server.server import MatchingEngine
 from multiprocessing import Queue, Process
 from connection.connect_wrapper import connect
-from client_local import trader
+from client_local import trader, order_sorting
 import logging 
 
 logging.basicConfig(level=logging.DEBUG #设置日志输出格式
@@ -16,9 +16,9 @@ logging.basicConfig(level=logging.DEBUG #设置日志输出格式
                     ,datefmt="%Y-%m-%d %H:%M:%S" #时间输出的格式                
                     )
 
-def exchange(recv_queue, send_queue, close_file):
+def exchange(recv_queue, send_queue, res_path, close_file):
 	connect_kernel = connect(recv_queue=recv_queue, send_queue=send_queue)
-	engine = MatchingEngine(connect=connect_kernel, path_close=close_file)
+	engine = MatchingEngine(connect=connect_kernel, res_path=res_path, path_close=close_file)
 	engine.engine_main_thread(matching_threads=2)
 
 def distribute_queue(q: Queue, qs: Queue):
@@ -32,9 +32,12 @@ if __name__ == "__main__":
 	close_file = "data_test/100x10x10/price1.h5"
 	# close_file = "data_test/100x1000x1000/price1.h5"
 
-	filepath = r"C:\Users\Leons\git\UbiYagami\data_test\100x10x10"
+	filepath = r"data_test/100x10x10"
 	# filepath = r"C:\Users\Leons\git\UbiYagami\data_test\100x1000x1000"
-	respath = r"C:\Users\Leons\git\UbiYagami\results\trader"
+	respath = r"results/trader"
+	
+	for i in range(1,3):
+		order_sorting(filepath, i)
 
 	order_queue, main_feed_queue  = Queue(), Queue()
 	feed_queues = []
@@ -43,7 +46,7 @@ if __name__ == "__main__":
 		feed_queues.append(feed_queue)
 		
 	process_list = []
-	p = Process(target=exchange, args=(order_queue, main_feed_queue, close_file))
+	p = Process(target=exchange, args=(order_queue, main_feed_queue, respath+"_ex", close_file))
 	process_list.append(p)
 	p.start()
 

@@ -427,7 +427,8 @@ if __name__ == "__main__":
     receive_queue = multiprocessing.Queue()
     # creating new processes
     process_list = []
-    process_put_data_in_queue = multiprocessing.Process(target=put_data_in_queue, args=(send_queue, args.filepath, int(args.client_id), trade_lists))
+    # process_put_data_in_queue = multiprocessing.Process(target=put_data_in_queue, args=(send_queue, args.filepath, int(args.client_id), trade_lists))
+    process_put_data_in_queue = multiprocessing.Process(target=put_data_in_queue_squeezed, args=(send_queue, args.filepath, int(args.client_id), trade_lists))
     process_communicate_with_server = multiprocessing.Process(target=communicate_with_server, args=(send_queue,receive_queue,int(args.client_id), args.filepath,trade_lists))
     process_write_result_to_file = multiprocessing.Process(target=write_result_to_file, args=(receive_queue,args.respath, int(args.client_id),trade_lists))
     

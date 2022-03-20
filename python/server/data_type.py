@@ -57,7 +57,8 @@ class Order:
                 'price': self.price,
                 'volume': int(self.volume)
             }
-
+    def to_list(self):
+        return [self.stk_code, self.order_id, self.direction, self.price, self.volume, self.type]
 
 class SubOrder:
     """
@@ -143,3 +144,38 @@ class Trade:
             'price': self.price,
             'volume': self.volume
         }
+        
+class TradeID:
+    """
+    A trade type for reordering;
+    """
+    def __init__(self, stk_code, bid_id, ask_id, price, volume, trade_id):
+        self.stk_code = stk_code
+        self.bid_id = bid_id
+        self.ask_id = ask_id
+        self.price = price
+        self.volume = volume
+        self.trade_id = trade_id
+
+    def to_trade(self):
+        return Trade(
+                    stk_code = self.stk_code, 
+                    bid_id = self.bid_id, 
+                    ask_id = self.ask_id, 
+                    price = self.price, 
+                    volume = self.volume  
+                )
+                
+    def to_dict(self):
+        return {
+            'stk_code': self.stk_code,
+            'bid_id': self.bid_id,
+            'ask_id': self.ask_id,
+            'price': self.price,
+            'volume': self.volume,
+            'trade_id': self.trade_id
+        }
+
+    def to_list(self):
+        return [self.stk_code, self.bid_id, self.ask_id, self.price, self.volume, self.trade_id]
+        

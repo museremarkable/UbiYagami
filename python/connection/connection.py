@@ -103,7 +103,7 @@ class ServerTCP:
             try:
                 if self.response_queue.empty():
                     # self.log.info('Response_queue is empty')
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(0.04)
                 else:
                     
                     data = self.response_queue.get()
@@ -121,7 +121,7 @@ class ServerTCP:
             except Exception as e:
                 self.log.exception(e)
                 # await self._del_trade(trad_add)
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.01)
 
     async def _listen_for_stream(self, reader: StreamReader, writer: StreamWriter):
         self.log.info('listen_stream begin')
@@ -222,12 +222,13 @@ class ServerTCP:
                 else:
                     writer.write(msg.encode())
                 await writer.drain()
-                await asyncio.sleep(0.05)
+
             except ConnectionError as e:
                 self.log.exception('Could not write to client.', exc_info=e)
                 inactive_trade.append(addr)
                 [await self._del_trade(username) for username in inactive_trade]
         self.log.info('Send message {}'.format(msg))
+        await asyncio.sleep(0.01)
 
 
 async def run_server(order_queue, response_queue, port):
